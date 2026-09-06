@@ -1,0 +1,532 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+@import 'leaflet/dist/leaflet.css';
+
+@import "@fontsource/space-grotesk/600.css";
+@import "@fontsource/space-grotesk/700.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+
+@keyframes search-progress {
+  0% { transform: translateX(-120%); }
+  50% { transform: translateX(140%); }
+  100% { transform: translateX(320%); }
+}
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design system definition.
+ *
+ * The @theme inline block maps CSS custom properties to Tailwind utility
+ * classes (e.g. --color-primary -> bg-primary, text-primary).
+ *
+ * The :root and .dark blocks define the actual color values using oklch.
+ * All colors MUST use oklch format.
+ *
+ * To add a new semantic color:
+ * 1. Add the variable to :root (light value) and .dark (dark value)
+ * 2. Register it in @theme inline as --color-<name>: var(--<name>)
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-brand: #16A34A;
+  --color-brand-hover: #15803D;
+  --color-success: #10B981;
+  --color-surface-100: #F8FAFC;
+  --color-surface-200: #E2E8F0;
+  --color-navy: #0F172A;
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(0.985 0.005 250);
+  --foreground: oklch(0.129 0.042 264.695);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.129 0.042 264.695);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.129 0.042 264.695);
+  --primary: oklch(0.527 0.154 150.069);
+  --primary-foreground: oklch(0.985 0.005 250);
+  --secondary: oklch(0.968 0.007 247.896);
+  --secondary-foreground: oklch(0.208 0.042 265.755);
+  --muted: oklch(0.968 0.007 247.896);
+  --muted-foreground: oklch(0.554 0.046 257.417);
+  --accent: oklch(0.968 0.007 247.896);
+  --accent-foreground: oklch(0.208 0.042 265.755);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.984 0.003 247.858);
+  --border: oklch(0.929 0.013 255.508);
+  --input: oklch(0.929 0.013 255.508);
+  --ring: oklch(0.704 0.04 256.788);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.984 0.003 247.858);
+  --sidebar-foreground: oklch(0.129 0.042 264.695);
+  --sidebar-primary: oklch(0.527 0.154 150.069);
+  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-accent: oklch(0.968 0.007 247.896);
+  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
+  --sidebar-border: oklch(0.929 0.013 255.508);
+  --sidebar-ring: oklch(0.704 0.04 256.788);
+}
+
+.dark {
+  --background: oklch(0.129 0.042 264.695);
+  --foreground: oklch(0.984 0.003 247.858);
+  --card: oklch(0.208 0.042 265.755);
+  --card-foreground: oklch(0.984 0.003 247.858);
+  --popover: oklch(0.208 0.042 265.755);
+  --popover-foreground: oklch(0.984 0.003 247.858);
+  --primary: oklch(0.929 0.013 255.508);
+  --primary-foreground: oklch(0.208 0.042 265.755);
+  --secondary: oklch(0.279 0.041 260.031);
+  --secondary-foreground: oklch(0.984 0.003 247.858);
+  --muted: oklch(0.279 0.041 260.031);
+  --muted-foreground: oklch(0.704 0.04 256.788);
+  --accent: oklch(0.279 0.041 260.031);
+  --accent-foreground: oklch(0.984 0.003 247.858);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.984 0.003 247.858);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.551 0.027 264.364);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.208 0.042 265.755);
+  --sidebar-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-accent: oklch(0.279 0.041 260.031);
+  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.551 0.027 264.364);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
+
+  /* Slim, smooth scrollbar — visible but unobtrusive */
+  * {
+   
+     scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  *::-webkit-scrollbar {
+   display:none
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.4);
+    border-radius: 99px;
+    transition: background 0.2s ease;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.65);
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+/* ── Admin monochrome (black & white) theme ──────────────────────────
+   Scoped to the `.admin-dark` class. When dark mode is on, the entire
+   admin surface collapses to pure black/white/gray — no color tints
+   anywhere, including status pills, action buttons, modals, and
+   toasts. Light mode is left exactly as it was. */
+.admin-dark {
+  --mono-bg: #000000;
+  --mono-surface: #0a0a0a;
+  --mono-surface-2: #141414;
+  --mono-border: #262626;
+  --mono-border-strong: #3f3f3f;
+  --mono-text: #ffffff;
+  --mono-text-muted: #a3a3a3;
+  --mono-text-faint: #737373;
+  --mono-card: #0d0d0d;
+  --mono-overlay: rgba(0, 0, 0, 0.75);
+  background: var(--mono-bg);
+  color: var(--mono-text);
+  min-height: 100vh;
+}
+
+/* Aggressive global kill-switch: neutralize every Tailwind color class
+   inside the admin surface. This guarantees pure B&W regardless of
+   which component is rendered. */
+.admin-dark *,
+.admin-dark *::before,
+.admin-dark *::after {
+  --tw-bg-opacity: 1;
+  --tw-text-opacity: 1;
+  --tw-border-opacity: 1;
+  --tw-gradient-from: #000000;
+  --tw-gradient-to: #000000;
+  --tw-gradient-stops: #000000, #000000;
+}
+
+/* Every emerald → black/white */
+.admin-dark .bg-emerald-50,
+.admin-dark .bg-emerald-100,
+.admin-dark .bg-emerald-200,
+.admin-dark .bg-emerald-300,
+.admin-dark .bg-emerald-400,
+.admin-dark .bg-emerald-500,
+.admin-dark .bg-emerald-600,
+.admin-dark .bg-emerald-700,
+.admin-dark .bg-emerald-800,
+.admin-dark .bg-emerald-900,
+.admin-dark .bg-emerald-950 { background-color: #ffffff !important; color: #000000 !important; }
+.admin-dark .text-emerald-50,
+.admin-dark .text-emerald-100,
+.admin-dark .text-emerald-200,
+.admin-dark .text-emerald-300,
+.admin-dark .text-emerald-400,
+.admin-dark .text-emerald-500,
+.admin-dark .text-emerald-600,
+.admin-dark .text-emerald-700,
+.admin-dark .text-emerald-800,
+.admin-dark .text-emerald-900,
+.admin-dark .text-emerald-950 { color: var(--mono-text) !important; }
+.admin-dark .border-emerald-200,
+.admin-dark .border-emerald-300,
+.admin-dark .border-emerald-400,
+.admin-dark .border-emerald-500,
+.admin-dark .border-emerald-600,
+.admin-dark .border-emerald-700 { border-color: var(--mono-border) !important; }
+.admin-dark .hover\:bg-emerald-500:hover,
+.admin-dark .hover\:bg-emerald-400:hover,
+.admin-dark .hover\:bg-emerald-600:hover { background-color: #e5e5e5 !important; color: #000000 !important; }
+.admin-dark .hover\:text-emerald-600:hover,
+.admin-dark .hover\:text-emerald-700:hover,
+.admin-dark .hover\:text-emerald-500:hover { color: var(--mono-text) !important; }
+
+/* Every sky → black/white */
+.admin-dark .bg-sky-50,
+.admin-dark .bg-sky-100,
+.admin-dark .bg-sky-200,
+.admin-dark .bg-sky-300,
+.admin-dark .bg-sky-400,
+.admin-dark .bg-sky-500,
+.admin-dark .bg-sky-600,
+.admin-dark .bg-sky-700,
+.admin-dark .bg-sky-800,
+.admin-dark .bg-sky-900 { background-color: var(--mono-surface) !important; }
+.admin-dark .text-sky-50,
+.admin-dark .text-sky-100,
+.admin-dark .text-sky-200,
+.admin-dark .text-sky-300,
+.admin-dark .text-sky-400,
+.admin-dark .text-sky-500,
+.admin-dark .text-sky-600,
+.admin-dark .text-sky-700,
+.admin-dark .text-sky-800,
+.admin-dark .text-sky-900 { color: var(--mono-text) !important; }
+.admin-dark .border-sky-200,
+.admin-dark .border-sky-300,
+.admin-dark .border-sky-400,
+.admin-dark .border-sky-500,
+.admin-dark .border-sky-600 { border-color: var(--mono-border) !important; }
+
+/* Every amber/orange/yellow → black/white */
+.admin-dark .bg-amber-50,
+.admin-dark .bg-amber-100,
+.admin-dark .bg-amber-200,
+.admin-dark .bg-amber-300,
+.admin-dark .bg-amber-400,
+.admin-dark .bg-amber-500,
+.admin-dark .bg-amber-600,
+.admin-dark .bg-amber-700,
+.admin-dark .bg-amber-800,
+.admin-dark .bg-amber-900,
+.admin-dark .bg-orange-50,
+.admin-dark .bg-orange-100,
+.admin-dark .bg-orange-200,
+.admin-dark .bg-orange-300,
+.admin-dark .bg-yellow-50,
+.admin-dark .bg-yellow-100,
+.admin-dark .bg-yellow-200,
+.admin-dark .bg-yellow-300 { background-color: var(--mono-surface) !important; }
+.admin-dark .text-amber-700,
+.admin-dark .text-amber-800,
+.admin-dark .text-amber-600,
+.admin-dark .text-amber-500,
+.admin-dark .text-orange-700,
+.admin-dark .text-orange-600,
+.admin-dark .text-yellow-700,
+.admin-dark .text-yellow-600 { color: var(--mono-text) !important; }
+.admin-dark .border-amber-200,
+.admin-dark .border-amber-300,
+.admin-dark .border-amber-400,
+.admin-dark .border-amber-500,
+.admin-dark .border-orange-200,
+.admin-dark .border-orange-300,
+.admin-dark .border-yellow-200,
+.admin-dark .border-yellow-300 { border-color: var(--mono-border) !important; }
+
+/* Every rose/red → black/white */
+.admin-dark .bg-rose-50,
+.admin-dark .bg-rose-100,
+.admin-dark .bg-rose-200,
+.admin-dark .bg-rose-300,
+.admin-dark .bg-rose-400,
+.admin-dark .bg-rose-500,
+.admin-dark .bg-rose-600,
+.admin-dark .bg-rose-700,
+.admin-dark .bg-rose-800,
+.admin-dark .bg-rose-900,
+.admin-dark .bg-red-50,
+.admin-dark .bg-red-100,
+.admin-dark .bg-red-200,
+.admin-dark .bg-red-300,
+.admin-dark .bg-red-400,
+.admin-dark .bg-red-500 { background-color: var(--mono-surface) !important; }
+.admin-dark .text-rose-500,
+.admin-dark .text-rose-600,
+.admin-dark .text-rose-700,
+.admin-dark .text-rose-800,
+.admin-dark .text-rose-900,
+.admin-dark .text-red-500,
+.admin-dark .text-red-600,
+.admin-dark .text-red-700 { color: var(--mono-text) !important; }
+.admin-dark .border-rose-200,
+.admin-dark .border-rose-300,
+.admin-dark .border-rose-400,
+.admin-dark .border-rose-500,
+.admin-dark .border-red-200,
+.admin-dark .border-red-300 { border-color: var(--mono-border) !important; }
+
+/* Every violet/purple/blue/fuchsia → black/white */
+.admin-dark .bg-violet-50,
+.admin-dark .bg-violet-100,
+.admin-dark .bg-violet-200,
+.admin-dark .bg-violet-300,
+.admin-dark .bg-violet-400,
+.admin-dark .bg-violet-500,
+.admin-dark .bg-violet-600,
+.admin-dark .bg-violet-700,
+.admin-dark .bg-violet-800,
+.admin-dark .bg-violet-900,
+.admin-dark .bg-purple-50,
+.admin-dark .bg-purple-100,
+.admin-dark .bg-purple-200,
+.admin-dark .bg-purple-300,
+.admin-dark .bg-purple-400,
+.admin-dark .bg-purple-500,
+.admin-dark .bg-blue-50,
+.admin-dark .bg-blue-100,
+.admin-dark .bg-blue-200,
+.admin-dark .bg-blue-300,
+.admin-dark .bg-blue-400,
+.admin-dark .bg-blue-500,
+.admin-dark .bg-blue-600,
+.admin-dark .bg-blue-700,
+.admin-dark .bg-fuchsia-500 { background-color: var(--mono-surface) !important; }
+.admin-dark .text-violet-600,
+.admin-dark .text-violet-700,
+.admin-dark .text-violet-800,
+.admin-dark .text-violet-900,
+.admin-dark .text-purple-600,
+.admin-dark .text-purple-700,
+.admin-dark .text-purple-800,
+.admin-dark .text-purple-900,
+.admin-dark .text-blue-600,
+.admin-dark .text-blue-700,
+.admin-dark .text-blue-800,
+.admin-dark .text-blue-900,
+.admin-dark .text-fuchsia-600 { color: var(--mono-text) !important; }
+.admin-dark .border-violet-200,
+.admin-dark .border-violet-300,
+.admin-dark .border-violet-400,
+.admin-dark .border-violet-500,
+.admin-dark .border-purple-200,
+.admin-dark .border-purple-300,
+.admin-dark .border-purple-400,
+.admin-dark .border-blue-200,
+.admin-dark .border-blue-300,
+.admin-dark .border-blue-400 { border-color: var(--mono-border) !important; }
+
+/* Tints with /10 through /95 opacity (Tailwind opacity variants) */
+.admin-dark [class*="bg-emerald-"]:not([class*="bg-emerald-50"]):not([class*="bg-emerald-100"]):not([class*="bg-emerald-200"]):not([class*="bg-emerald-300"]):not([class*="bg-emerald-400"]):not([class*="bg-emerald-500"]):not([class*="bg-emerald-600"]):not([class*="bg-emerald-700"]):not([class*="bg-emerald-800"]):not([class*="bg-emerald-900"]):not([class*="bg-emerald-950"]),
+.admin-dark [class*="bg-sky-"]:not([class*="bg-sky-50"]):not([class*="bg-sky-100"]):not([class*="bg-sky-200"]):not([class*="bg-sky-300"]):not([class*="bg-sky-400"]):not([class*="bg-sky-500"]):not([class*="bg-sky-600"]):not([class*="bg-sky-700"]):not([class*="bg-sky-800"]):not([class*="bg-sky-900"]),
+.admin-dark [class*="bg-amber-"]:not([class*="bg-amber-50"]):not([class*="bg-amber-100"]):not([class*="bg-amber-200"]):not([class*="bg-amber-300"]):not([class*="bg-amber-400"]):not([class*="bg-amber-500"]):not([class*="bg-amber-600"]):not([class*="bg-amber-700"]):not([class*="bg-amber-800"]):not([class*="bg-amber-900"]),
+.admin-dark [class*="bg-rose-"]:not([class*="bg-rose-50"]):not([class*="bg-rose-100"]):not([class*="bg-rose-200"]):not([class*="bg-rose-300"]):not([class*="bg-rose-400"]):not([class*="bg-rose-500"]):not([class*="bg-rose-600"]):not([class*="bg-rose-700"]):not([class*="bg-rose-800"]):not([class*="bg-rose-900"]) {
+  background-color: var(--mono-surface) !important;
+}
+
+/* Slate / neutral surfaces (the bulk of the UI) */
+.admin-dark .bg-white { background-color: var(--mono-card) !important; }
+.admin-dark .bg-slate-50 { background-color: var(--mono-surface) !important; }
+.admin-dark .bg-slate-100 { background-color: var(--mono-surface-2) !important; }
+.admin-dark .bg-slate-200 { background-color: var(--mono-border) !important; }
+.admin-dark .bg-slate-300 { background-color: var(--mono-border-strong) !important; }
+.admin-dark .bg-slate-400,
+.admin-dark .bg-slate-500,
+.admin-dark .bg-slate-600,
+.admin-dark .bg-slate-700,
+.admin-dark .bg-slate-800,
+.admin-dark .bg-slate-900 { background-color: var(--mono-text) !important; }
+.admin-dark .bg-black { background-color: #000000 !important; }
+.admin-dark .bg-white\/10 { background-color: rgba(255, 255, 255, 0.08) !important; }
+.admin-dark .bg-white\/20 { background-color: rgba(255, 255, 255, 0.15) !important; }
+.admin-dark .bg-white\/90,
+.admin-dark .bg-white\/80 { background-color: var(--mono-card) !important; color: var(--mono-text) !important; }
+
+/* Borders */
+.admin-dark .border-slate-200 { border-color: var(--mono-border) !important; }
+.admin-dark .border-slate-100 { border-color: var(--mono-border) !important; }
+.admin-dark .border-slate-300 { border-color: var(--mono-border-strong) !important; }
+.admin-dark .border-white\/15 { border-color: rgba(255, 255, 255, 0.15) !important; }
+.admin-dark .border-white\/10 { border-color: rgba(255, 255, 255, 0.1) !important; }
+.admin-dark .border-black\/10 { border-color: rgba(0, 0, 0, 0.4) !important; }
+
+/* Text colors */
+.admin-dark .text-slate-900,
+.admin-dark .text-slate-950,
+.admin-dark .text-slate-800 { color: var(--mono-text) !important; }
+.admin-dark .text-slate-700,
+.admin-dark .text-slate-600 { color: var(--mono-text-muted) !important; }
+.admin-dark .text-slate-500,
+.admin-dark .text-slate-400 { color: var(--mono-text-faint) !important; }
+.admin-dark .text-white { color: var(--mono-text) !important; }
+.admin-dark .text-white\/80 { color: rgba(255, 255, 255, 0.8) !important; }
+.admin-dark .text-white\/70 { color: rgba(255, 255, 255, 0.7) !important; }
+.admin-dark .text-white\/60 { color: rgba(255, 255, 255, 0.6) !important; }
+.admin-dark .text-emerald-50,
+.admin-dark .text-emerald-100,
+.admin-dark .text-emerald-200 { color: var(--mono-text-faint) !important; }
+.admin-dark .divide-slate-100 > * + * { border-color: var(--mono-border) !important; }
+.admin-dark .shadow-sm,
+.admin-dark .shadow { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6) !important; }
+.admin-dark .hover\:bg-slate-50:hover { background-color: var(--mono-surface) !important; }
+.admin-dark .hover\:bg-slate-100:hover { background-color: var(--mono-surface-2) !important; }
+.admin-dark .placeholder\:text-slate-400::placeholder { color: var(--mono-text-faint) !important; }
+
+/* Form controls */
+.admin-dark input,
+.admin-dark select,
+.admin-dark textarea {
+  background-color: var(--mono-surface-2) !important;
+  border-color: var(--mono-border) !important;
+  color: var(--mono-text) !important;
+}
+.admin-dark input::placeholder,
+.admin-dark textarea::placeholder { color: var(--mono-text-faint) !important; }
+.admin-dark input:focus,
+.admin-dark select:focus,
+.admin-dark textarea:focus {
+  border-color: #ffffff !important;
+  outline: none;
+}
+.admin-dark input[type="checkbox"],
+.admin-dark input[type="radio"] { accent-color: #ffffff !important; }
+.admin-dark select option { background: var(--mono-surface) !important; color: var(--mono-text) !important; }
+
+/* Modal backdrop */
+.admin-dark .bg-slate-900\/50,
+.admin-dark .bg-slate-900\/60,
+.admin-dark .bg-slate-900\/40 { background-color: var(--mono-overlay) !important; }
+
+/* Status pill tints — collapse to gray borders on dark */
+.admin-dark [class*="bg-amber-"],
+.admin-dark [class*="bg-sky-"],
+.admin-dark [class*="bg-emerald-"],
+.admin-dark [class*="bg-rose-"],
+.admin-dark [class*="bg-violet-"],
+.admin-dark [class*="bg-purple-"],
+.admin-dark [class*="bg-blue-"],
+.admin-dark [class*="bg-yellow-"],
+.admin-dark [class*="bg-orange-"] {
+  background-color: transparent !important;
+}
+.admin-dark [class*="border-amber-"],
+.admin-dark [class*="border-sky-"],
+.admin-dark [class*="border-emerald-"],
+.admin-dark [class*="border-rose-"],
+.admin-dark [class*="border-violet-"],
+.admin-dark [class*="border-purple-"],
+.admin-dark [class*="border-blue-"],
+.admin-dark [class*="border-yellow-"],
+.admin-dark [class*="border-orange-"] {
+  border-color: var(--mono-border-strong) !important;
+}
+
+/* Modal surface — dark with light text so it sits properly above the
+   dark backdrop, matching the rest of the admin surface. */
+.admin-dark .admin-modal-light {
+  background-color: var(--mono-card) !important;
+  color: var(--mono-text) !important;
+  border: 1px solid var(--mono-border) !important;
+}
+
+/* Ensure lucide icons inherit current color so they don't show color */
+.admin-dark svg.lucide { color: currentColor; }
