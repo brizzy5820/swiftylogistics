@@ -1,9 +1,12 @@
 
 import bcrypt from "bcrypt";
+
 import User from "../models/User.js";
 import AppError from "../utils/AppError.js";
+import { generateAccessToken} from "../utils/jwt.js"
 
-export  const registerUser = async ({
+// Sign in user
+ const registerUser = async ({
   name,
   email,
   password,
@@ -51,5 +54,30 @@ export  const registerUser = async ({
     throw error;
   }
 };
+// User login
+ const loginUser = async ({email, password})=>{
+  const normalizeEmail =   email.toLowerCase().trim()
+const user = await User.findOne({email:normalizeEmail})
 
+if (!user){
+  throw new AppError ("Invalid email or Password",401)
+}
+const matchPassword = await bcrypt.compare(password, user.passwordHash)
+if(!matchPassword){
+  throw new AppError("Invalid email or Password",401)
+}
+  const accessToken = generateAccessToken(user)
+  return{
+    accessToken,
+    id: user._id,
+    email:user.email,
+    phone:user.phone,
+    name:user.name,
+    role: user.role,
 
+  }
+ }
+
+export{
+  registerUser, loginUser
+}

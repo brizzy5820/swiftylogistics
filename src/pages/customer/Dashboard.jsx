@@ -65,8 +65,8 @@ export default function CustomerDashboard() {
         </button>
       </section>
 {/* Activity */}
-     {
-      recent.length &&(
+    {
+     recent.length > 0 &&(
          <section className='mt-2'>
         <div className="divide-y divide-slate-100 overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200/50">
         <div className=" p-3 flex items-center justify-between">
@@ -113,7 +113,7 @@ export default function CustomerDashboard() {
      }
     
 {/* Actions */}
-      <section className='mt-4'>
+      <section className={recent.length > 0 ? 'mt-4' : 'mt-8'}>
         <div className="mb-3 flex items-center justify-between">
           <p className="font-display text-lg font-bold">Suggestions</p>
           <span className="flex items-center gap-1 text-sm font-bold text-emerald-700">

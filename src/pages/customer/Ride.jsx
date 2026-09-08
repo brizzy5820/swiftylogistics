@@ -474,18 +474,18 @@ export default function Ride() {
       {(showModal || searchingRideId || matchedRider) && (
         <>
           <div
-            className={`fixed inset-x-0 top-0 z-50 lg:hidden ${sheetDragging ? '' : 'transition-[bottom] duration-200 ease-out'}`}
+            className={`fixed inset-x-0 top-0 z-100 lg:hidden ${sheetDragging ? '' : 'transition-[bottom] duration-200 ease-out'}`}
             style={{ bottom: sheetOffsetPx }}
           >
              
-            <DeliveryMap
-              pickup={activeRide ? livePickup : pickupCoords}
-              dropoff={activeRide ? liveDropoff : dropoffCoords}
-              courier={activeRide ? liveCourier : null}
-              courierInfo={activeRide ? liveCourierInfo : null}
-              destination={activeRide ? activeRide.dropoff.coords : dropoffCoords}
-              className="h-full w-full z-999"
-            />
+          <DeliveryMap
+            pickup={activeRide ? livePickup : pickupCoords}
+            dropoff={activeRide ? liveDropoff : dropoffCoords}
+            courier={liveCourier}
+            courierInfo={liveCourierInfo}
+            destination={activeRide ? activeRide.dropoff.coords : dropoffCoords}
+            className="h-full w-full"
+          />
           </div>
 
           {ridePick && (

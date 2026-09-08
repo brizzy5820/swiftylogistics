@@ -1,5 +1,5 @@
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Phone, X, CheckCircle, ArrowLeft, ClipboardList, UserCheck, Package, Truck, Copy, MapPinned, LoaderCircle, MapPin, Search } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { DeliveryMap } from '@/components/delivery-map'
@@ -28,7 +28,13 @@ export default function Track() {
   const deliveryId = delivery?.id
   const searchParams = new URLSearchParams(location.search)
   const requestedTab = searchParams.get('tab')
-
+// top of Track component, alongside your other state
+const [sheetHeightPx, setSheetHeightPx] = useState(0)
+const [sheetDragging, setSheetDragging] = useState(true)
+const handleSheetHeightChange = useCallback((px, dragging = true) => {
+  setSheetHeightPx(px)
+  setSheetDragging(Boolean(dragging))
+}, [])
   // Auto-advance removed: the real logged-in rider now drives status progression
   // from their dashboard. The store's listener system broadcasts changes here reactively.
 
@@ -377,43 +383,57 @@ export default function Track() {
   const livePill = (
     <div className="flex items-center gap-2 rounded-full px-4">
       <div className={`size-2 rounded-full ${isCancelled ? 'bg-red-400' : isDelivered ? 'bg-emerald-500' : 'bg-emerald-500 animate-pulse'}`} />
-      <span className="text-2xs font-bold">Live · {delivery.id}</span>
+      <span className="text-2xs text-gray-100 lg:text-black font-bold">Live · {delivery.id}</span>
     </div>
   )
 
   return (
     <>
       {/* ── Mobile: full-bleed map with a draggable bottom sheet ── */}
-      <div className="lg:hidden">
-        <div className="fixed inset-0 z-0">
-          <DeliveryMap
-            pickup={delivery.pickup.coords}
-            dropoff={delivery.dropoff.coords}
-            courier={delivery.courierPosition}
-            courierInfo={{ riderName: delivery.riderName, rideType: delivery.rideType, phone: delivery.riderPhone }}
-            destination={delivery.dropoff.coords}
-            className="h-full"
-          />
-        </div>
+   <div className="lg:hidden h-full">
+  <div className="relative h-[50vh] sm:h-[60vh] z-100">
+    {/* Map fills the screen from the top down to wherever the drawer
+        currently starts. bottom = sheetHeightPx, so dragging the sheet
+        down shrinks its height -> bottom shrinks -> map grows, and
+        dragging up does the reverse. No transition while actively
+        dragging (must track the finger 1:1); animates on snap. */}
+    <div
+      className={`fixed inset-x-0 top-0 ${sheetDragging ? '' : 'transition-[bottom] duration-200 ease-out'}`}
+      style={{ bottom: sheetHeightPx }}
+    >
+      <DeliveryMap
+        pickup={delivery.pickup.coords}
+        dropoff={delivery.dropoff.coords}
+        courier={delivery.courierPosition}
+        courierInfo={{ riderName: delivery.riderName, rideType: delivery.rideType, phone: delivery.riderPhone }}
+        destination={delivery.dropoff.coords}
+        className="h-full w-full"
+      />
+    </div>
 
-        <div className="relative z-10 flex items-center justify-between p-4">
-          <button
-            type="button"
-            onClick={handleBack}
-            aria-label="Go back"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          {livePill}
-        </div>
+    <div className="relative  flex items-center justify-between p-4">
+      <button
+        type="button"
+        onClick={handleBack}
+        aria-label="Go back"
+        className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </button>
+      {livePill}
+    </div>
+  </div>
 
-        {/* NOTE: banner is rendered inside the shared mobile drawer. */}
-        <MobileDrawer banner={banner} initialSnapIndex={1} snapPoints={[14, 52, 88]}>
-          <DetailPanel />
-        </MobileDrawer>
-      </div>
-
+  {/* NOTE: banner is rendered inside the shared mobile drawer. */}
+  <MobileDrawer
+    banner={banner}
+    initialSnapIndex={1}
+    snapPoints={[14, 52, 88]}
+    onHeightChange={handleSheetHeightChange}
+  >
+    <DetailPanel />
+  </MobileDrawer>
+</div>
       {/* ── Desktop: side-by-side grid (no drag — real layout space, not a floating sheet) ── */}
       <main className="hidden px-4 mt-4 sm:px-6 lg:px-8 py-6 max-w-7xl lg:py-3 mx-auto lg:block">
       

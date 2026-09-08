@@ -76,9 +76,16 @@ export function DeliveryMap({ pickup, dropoff, courier, courierInfo, destination
   const infoWindowRef = useRef(null)
   const initializedRef = useRef(false)
   const onMapClickRef = useRef(onMapClick)
+  // Always-fresh snapshot of pickup/dropoff, read from inside the resize
+  // observer below without needing to resubscribe it every time either
+  // value changes.
+  const pickupRef = useRef(pickup)
+  const dropoffRef = useRef(dropoff)
   const [error, setError] = useState(null)
 
   useEffect(() => { onMapClickRef.current = onMapClick }, [onMapClick])
+  useEffect(() => { pickupRef.current = pickup }, [pickup])
+  useEffect(() => { dropoffRef.current = dropoff }, [dropoff])
 
   // ── Boot: create the map once ───────────────────────────────────────────
   useEffect(() => {
@@ -117,6 +124,53 @@ export function DeliveryMap({ pickup, dropoff, courier, courierInfo, destination
       infoWindowRef.current = null
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Container resize: Google Maps does NOT auto-detect its container
+  // resizing (no internal ResizeObserver of its own). Whenever the map's
+  // wrapping box changes size — most commonly on mobile, where a bottom
+  // sheet grows/shrinks and pushes the map's visible area up or down —
+  // the map's cached internal dimensions go stale. Left uncorrected,
+  // fitBounds()/setCenter() calls compute against the wrong box and
+  // markers can render off-canvas, clipped, or simply not appear in the
+  // newly-revealed strip. Firing the 'resize' event forces Google Maps to
+  // remeasure its container, then we re-fit to whatever markers are
+  // currently showing so framing stays correct after the resize settles.
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    let frame = null
+
+    const observer = new ResizeObserver(() => {
+      if (frame) cancelAnimationFrame(frame)
+      // Wait a frame so we read the box after layout has actually settled
+      // (important during the sheet's CSS height/bottom transition).
+      frame = requestAnimationFrame(() => {
+        if (!mapRef.current || !initializedRef.current) return
+        const G = window.google.maps
+        const map = mapRef.current
+        G.event.trigger(map, 'resize')
+
+        const p = pickupRef.current
+        const d = dropoffRef.current
+        if (p && d) {
+          const bounds = new G.LatLngBounds()
+          bounds.extend({ lat: p.lat, lng: p.lng })
+          bounds.extend({ lat: d.lat, lng: d.lng })
+          map.fitBounds(bounds, 64)
+        } else if (p) {
+          map.setCenter({ lat: p.lat, lng: p.lng })
+        } else if (d) {
+          map.setCenter({ lat: d.lat, lng: d.lng })
+        }
+      })
+    })
+
+    observer.observe(el)
+    return () => {
+      if (frame) cancelAnimationFrame(frame)
+      observer.disconnect()
+    }
+  }, [])
 
   // ── Static layer: pickup + dropoff + route (re-draws when they change) ──
   useEffect(() => {

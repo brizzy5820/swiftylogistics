@@ -69,18 +69,11 @@ export default function History() {
       <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
         
         <div className="text-center flex items-center gap-1 sm:flex-row sm:items-center">
-         <button
-          type="button"
-          onClick={handleBack}
-          aria-label="Go back"
-          className=" inline-flex  w-10 transition hover:bg-slate-50 hover:text-slate-900"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
- <h1 className="font-display text-left text-3xl font-bold tracking-tight text-slate-900">Delivery history</h1>
+      
+ <h1 className="font-display text-left text-3xl font-bold tracking-tight text-slate-900">Activites</h1>
           
         </div>
-<p className="text-sm px-4 text-left text-slate-500">click delivery log to view details</p>
+<p className="text-sm  text-left text-slate-500">click delivery log to view details</p>
         {/* <div className="mt-6 flex flex-wrap gap-3 sm:gap-4">
           <StatCard icon={Package} label="Pending" value={pending.length} tone="text-orange-600 bg-orange-500/10" />
           <StatCard icon={Clock} label="In progress" value={active.length} tone="text-emerald-600 bg-emerald-50" />
