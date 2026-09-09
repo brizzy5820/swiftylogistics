@@ -196,7 +196,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
   if (!delivery && !lookupSettled)
     return (
       <AppShell>
-        <main className="mx-auto flex min-h-[60vh] max-w-3xl flex-col items-center justify-center px-6 py-12 text-center">
+        <main className="mx-auto flex  max-w-3xl flex-col items-center justify-center px-6 py-12 text-center">
           <LoaderCircle className="h-10 w-10 animate-spin text-emerald-600" />
           <p className="mt-4 text-sm font-semibold text-slate-600">Loading tracking details...</p>
         </main>
@@ -206,7 +206,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
   if (!delivery)
     return (
       <AppShell>
-        <main className="mx-auto flex min-h-[60vh] max-w-3xl flex-col items-center justify-center px-6 py-12 text-center">
+        <main className="mx-auto flex  max-w-3xl flex-col items-center justify-center px-6 py-12 text-center">
           <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-100 text-slate-500">
             <MapPinned className="h-8 w-8" />
           </div>
@@ -274,7 +274,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
 
   function DetailPanel() {
     return (
-      <>
+      <div className='flex flex-col gap-3 ' >
         {/* Status card */}
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between gap-3">
@@ -376,7 +376,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
             <X className="h-4 w-4" /> Cancel order
           </button>
         )}
-      </>
+      </div>
     )
   }
 
@@ -391,7 +391,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
     <>
       {/* ── Mobile: full-bleed map with a draggable bottom sheet ── */}
    <div className="lg:hidden h-full">
-  <div className="relative h-[50vh] sm:h-[60vh] z-100">
+   <div className="relative h-[50vh] sm:h-[60vh] z-10">
     {/* Map fills the screen from the top down to wherever the drawer
         currently starts. bottom = sheetHeightPx, so dragging the sheet
         down shrinks its height -> bottom shrinks -> map grows, and
@@ -440,9 +440,9 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
         {banner && <div className="mb-6">{banner}</div>}
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <aside className="lg:col-span-4 space-y-6">
-            
-         <div className='flex '>   
+            <aside className="lg:col-span-4 space-y-6 overflow-y-auto max-h-[calc(100vh-7rem)]">
+           
+          <div className='flex '>   
           <button
             type="button"
             onClick={handleBack}

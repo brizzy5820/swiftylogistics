@@ -4,9 +4,10 @@ import bcrypt from "bcrypt";
 import User from "../models/User.js";
 import AppError from "../utils/AppError.js";
 import { generateAccessToken} from "../utils/jwt.js"
-
+import RefreshToken from "../models/RefreshToken.js";
+import {generateRefreshToken,hashRefreshToken,} from "../utils/refreshToken.js";
 // Sign in user
- const registerUser = async ({
+ const registerUser = async ({ 
   name,
   email,
   password,
@@ -77,7 +78,24 @@ if(!matchPassword){
 
   }
  }
+ const createRefreshToken = async (userId) => {
+  const token = generateRefreshToken();
+
+  const tokenHash = hashRefreshToken(token);
+
+  const expiresAt = new Date(
+    Date.now() + 30 * 24 * 60 * 60 * 1000
+  );
+
+  await RefreshToken.create({
+    user: userId,
+    tokenHash,
+    expiresAt,
+  });
+
+  return token;
+};
 
 export{
-  registerUser, loginUser
+  registerUser, loginUser, createRefreshToken
 }

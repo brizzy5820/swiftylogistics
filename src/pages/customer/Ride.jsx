@@ -142,6 +142,7 @@ function LocationField({ variant, value, onChange, onCoords, placeholder }) {
   const [focused, setFocused] = useState(false)
   const [geoLabel, setGeoLabel] = useState('Detecting location…')
   const [geoReady, setGeoReady] = useState(false)
+  const geoCoordsRef = useRef(null)
   const timer = useRef(null)
 
   useEffect(() => {
@@ -150,6 +151,7 @@ function LocationField({ variant, value, onChange, onCoords, placeholder }) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+        geoCoordsRef.current = coords
         onCoords?.(coords)
         setGeoLabel(`Current location (${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)})`)
         setGeoReady(true)
@@ -177,6 +179,7 @@ function LocationField({ variant, value, onChange, onCoords, placeholder }) {
 
   function useMyLocation() {
     if (!geoReady) return
+    onCoords?.(geoCoordsRef.current)
     onChange(geoLabel)
     setShow(false)
   }
@@ -279,8 +282,8 @@ export default function Ride() {
   const [option, setOption] = useState(null)
   const [pickup, setPickup] = useState(intent.pickup || '')
   const [dropoff, setDropoff] = useState(intent.dropoff || '')
-  const [pickupCoords, setPickupCoords] = useState(null)
-  const [dropoffCoords, setDropoffCoords] = useState(null)
+  const [pickupCoords, setPickupCoords] = useState(intent.pickupCoords || null)
+  const [dropoffCoords, setDropoffCoords] = useState(intent.dropoffCoords || null)
   const [ridePick, setRidePick] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)

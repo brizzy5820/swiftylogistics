@@ -148,7 +148,7 @@ function IncomingList({ incoming, onAccept, onReject }) {
         <TripCard
           key={d.id}
           delivery={d}
-          actionLabel="Accept"
+          actionLabel="Accept ride"
           onAction={() => onAccept(d.id)}
           onSecondary={() => onReject(d.id)}
           disableNavigation
@@ -183,7 +183,7 @@ export default function RiderDashboard() {
 
   const incoming = useStore((s) => s.deliveries.filter((d) => d.status === 'pending' && (!d.riderId || d.riderId === user?.id)))
   const myJobs = useStore((s) =>
-    user ? s.deliveries.filter((d) => d.riderId === user.id && d.status !== 'delivered') : [],
+    user ? s.deliveries.filter((d) => d.riderId === user.id && d.status !== 'delivered' && d.status !== 'cancelled') : [],
   )
   const completed = useStore((s) =>
     user ? s.deliveries.filter((d) => d.riderId === user.id && d.status === 'delivered') : [],

@@ -5,27 +5,37 @@ import { useEffect, useRef, useState } from 'react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../components/ui/sheet'
 import { ServiceGrid } from '../components/marketing/ServiceGrid'
 import { Footer } from '../components/marketing/Footer'
-import { ADDRESS_SUGGESTIONS, fetchLagosSuggestions } from '../lib/address-suggestions'
+import { ADDRESS_SUGGESTIONS, fetchLagosSuggestions, reverseGeocode, resolveAddressCoords } from '../lib/address-suggestions'
 
 // variant: 'pickup' | 'dropoff' — circle vs square marker, and the
 // "use my location" arrow only shows on pickup. Green border on focus.
-function LocationField({ variant, value, onChange, placeholder }) {
+function LocationField({ variant, value, onChange, onCoords, placeholder }) {
   const isPickup = variant === 'pickup'
   const [show, setShow] = useState(false)
   const [items, setItems] = useState(ADDRESS_SUGGESTIONS)
   const [focused, setFocused] = useState(false)
   const [geoLabel, setGeoLabel] = useState('Detecting location…')
   const [geoReady, setGeoReady] = useState(false)
+  const geoCoordsRef = useRef(null)
   const timer = useRef(null)
 
   useEffect(() => {
     if (!isPickup) return
     if (!navigator.geolocation) { setGeoLabel('Location unavailable'); return }
     navigator.geolocation.getCurrentPosition(
-      () => { setGeoLabel('My location'); setGeoReady(true) },
+      (pos) => {
+        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+        geoCoordsRef.current = coords
+        onCoords?.(coords)
+        setGeoLabel(`My location`)
+        setGeoReady(true)
+        reverseGeocode(coords).then((label) => {
+          if (label) setGeoLabel(label)
+        })
+      },
       () => setGeoLabel('Location unavailable'),
     )
-  }, [isPickup])
+  }, [isPickup, onCoords])
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current)
@@ -42,6 +52,8 @@ function LocationField({ variant, value, onChange, placeholder }) {
   }, [value])
 
   function useMyLocation() {
+    if (!geoReady) return
+    onCoords?.(geoCoordsRef.current)
     onChange(geoLabel)
     setShow(false)
   }
@@ -111,7 +123,7 @@ function LocationField({ variant, value, onChange, placeholder }) {
               <button
                 key={it.label}
                 type="button"
-                onMouseDown={(e) => { e.preventDefault(); onChange(it.label); setShow(false) }}
+                onMouseDown={(e) => { e.preventDefault(); onChange(it.label); onCoords?.(it.coords); setShow(false) }}
                 className="block w-full truncate px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
               >
                 {it.label}
@@ -134,11 +146,15 @@ export default function Index() {
   const [mode, setMode] = useState('ride')
   const [pickup, setPickup] = useState('')
   const [dropoff, setDropoff] = useState('')
+  const [pickupCoords, setPickupCoords] = useState(null)
+  const [dropoffCoords, setDropoffCoords] = useState(null)
   const [trackCode, setTrackCode] = useState('')
 
   function handleRide(e) {
     e.preventDefault()
-    navigate('/customer/ride', { state: { pickup, dropoff } })
+    const pc = pickupCoords ?? resolveAddressCoords(pickup, null)
+    const dc = dropoffCoords ?? resolveAddressCoords(dropoff, null)
+    navigate('/customer/ride', { state: { pickup, dropoff, pickupCoords: pc, dropoffCoords: dc } })
   }
 
   function handleTrack(e) {
@@ -183,8 +199,8 @@ export default function Index() {
                 <div className="relative space-y-6">
                   {/* Dashed connector: bottom of pickup marker to top of dropoff marker */}
                   <div className="pointer-events-none absolute left-[23px] top-[52px] h-6 w-px border-l-2 border-dashed border-slate-300" />
-                  <LocationField variant="pickup" value={pickup} onChange={setPickup} placeholder="Pickup location" />
-                  <LocationField variant="dropoff" value={dropoff} onChange={setDropoff} placeholder="Where to?" />
+                   <LocationField variant="pickup" value={pickup} onChange={setPickup} onCoords={setPickupCoords} placeholder="Pickup location" />
+                   <LocationField variant="dropoff" value={dropoff} onChange={setDropoff} onCoords={setDropoffCoords} placeholder="Where to?" />
                 </div>
                 <button type="submit" className="mt-4 flex items-center bg-emerald-500 gap-2 rounded-full px-6 py-2.5 text-white text-sm font-bold shadow-sm transition-all ">Find ride <ArrowRight className="h-4 w-4" /></button>
               </form>

@@ -21,7 +21,14 @@ import {registerUser,loginUser }from "../services/auth.services.js";
     user,
   })
 };
+const me = async (req, res) => {
+  return res.status(200).json({
+    success: true,
+    user: req.user,
+  });
+};
 export  {
   register,
-  login
+  login, 
+  me
 };

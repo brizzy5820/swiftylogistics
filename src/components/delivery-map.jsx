@@ -81,7 +81,8 @@ export function DeliveryMap({ pickup, dropoff, courier, courierInfo, destination
   // value changes.
   const pickupRef = useRef(pickup)
   const dropoffRef = useRef(dropoff)
-  const [error, setError] = useState(null)
+   const [error, setError] = useState(null)
+   const [mapReady, setMapReady] = useState(false)
 
   useEffect(() => { onMapClickRef.current = onMapClick }, [onMapClick])
   useEffect(() => { pickupRef.current = pickup }, [pickup])
@@ -108,8 +109,9 @@ export function DeliveryMap({ pickup, dropoff, courier, courierInfo, destination
           map.addListener('click', (e) => onMapClickRef.current(e.latLng.lat(), e.latLng.lng()))
         }
 
-        mapRef.current = map
-        initializedRef.current = true
+         mapRef.current = map
+         initializedRef.current = true
+         setMapReady(true)
       })
       .catch((e) => setError(e.message))
 
@@ -117,6 +119,7 @@ export function DeliveryMap({ pickup, dropoff, courier, courierInfo, destination
       cancelled = true
       mapRef.current = null
       initializedRef.current = false
+      setMapReady(false)
       courierMarkerRef.current = null
       pickupMarkerRef.current = null
       dropoffMarkerRef.current = null
@@ -172,18 +175,25 @@ export function DeliveryMap({ pickup, dropoff, courier, courierInfo, destination
     }
   }, [])
 
-  // ── Static layer: pickup + dropoff + route (re-draws when they change) ──
-  useEffect(() => {
-    if (!mapRef.current || !initializedRef.current) return
-    const G = window.google.maps
-    const map = mapRef.current
+   // ── Static layer: pickup + dropoff + route (re-draws when they change) ──
+   useEffect(() => {
+     if (!mapRef.current || !initializedRef.current) return
+     const G = window.google.maps
+     const map = mapRef.current
 
-    pickupMarkerRef.current?.setMap(null)
-    dropoffMarkerRef.current?.setMap(null)
-    routeRef.current?.setMap(null)
-    pickupMarkerRef.current = null
-    dropoffMarkerRef.current = null
-    routeRef.current = null
+     // Force the map to remeasure its container — important when the map
+     // boots asynchronously while its container has different dimensions
+     // (e.g. a bottom sheet is open on mobile, changing the visible area).
+     // Without this, markers created right after async init can land
+     // off-canvas or clip out of view.
+     G.event.trigger(map, 'resize')
+
+     pickupMarkerRef.current?.setMap(null)
+     dropoffMarkerRef.current?.setMap(null)
+     routeRef.current?.setMap(null)
+     pickupMarkerRef.current = null
+     dropoffMarkerRef.current = null
+     routeRef.current = null
 
     const bounds = new G.LatLngBounds()
 
@@ -223,11 +233,11 @@ export function DeliveryMap({ pickup, dropoff, courier, courierInfo, destination
     } else if (pickup) {
       map.setCenter({ lat: pickup.lat, lng: pickup.lng })
       map.setZoom(14)
-    } else if (dropoff) {
-      map.setCenter({ lat: dropoff.lat, lng: dropoff.lng })
-      map.setZoom(14)
-    }
-  }, [pickup, dropoff])
+     } else if (dropoff) {
+       map.setCenter({ lat: dropoff.lat, lng: dropoff.lng })
+       map.setZoom(14)
+     }
+   }, [pickup, dropoff, mapReady])
 
   // ── Live: smooth courier marker updates ──────────────────────────────────
   useEffect(() => {

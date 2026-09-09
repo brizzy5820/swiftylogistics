@@ -138,6 +138,7 @@ export function TripCard({
                 onBeforeNavigate?.()
               }}
               className={actionClassName}
+             
             >
               {label}
             </Link>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ArrowLeft, Briefcase, CheckCircle2, Clock3, MapPin, PackageCheck, User } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { DeliveryMap } from '@/components/delivery-map'
@@ -22,14 +22,18 @@ const TABS = [
 export default function RiderJob() {
   const user = useRequireAuth('rider')
   const navigate = useNavigate()
+  const location = useLocation()
   const { id } = useParams()
   const [autoMove, setAutoMove] = useState(true)
-  const [activeTab, setActiveTab] = useState('requests')
+
+  const searchParams = new URLSearchParams(location.search)
+  const requestedTab = searchParams.get('tab')
+  const activeTab = TABS.some((t) => t.id === requestedTab) ? requestedTab : 'requests'
 
   const delivery = useStore((s) => s.deliveries.find((d) => d.id === id))
   const incoming = useStore((s) => s.deliveries.filter((d) => d.status === 'pending' && (!d.riderId || d.riderId === user?.id)))
   const activeJobs = useStore((s) =>
-    user ? s.deliveries.filter((d) => d.riderId === user.id && d.status !== 'delivered' && d.status !== 'cancelled') : [],
+    user ? s.deliveries.filter((d) => d.riderId === user.id && ['accepted', 'picked_up', 'in_transit'].includes(d.status)) : [],
   )
   const completed = useStore((s) =>
     user ? s.deliveries.filter((d) => d.riderId === user.id && d.status === 'delivered') : [],
@@ -67,7 +71,7 @@ export default function RiderJob() {
 
   function accept(jobId) {
     updateDeliveryStatus(jobId, 'accepted', user.id, user.name)
-    setActiveTab('active')
+    navigate('/rider/job?tab=active')
   }
 
   function reject(jobId) {
@@ -100,7 +104,7 @@ export default function RiderJob() {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => navigate(`/rider/job?tab=${tab.id}`)}
                 className={`min-w-0 rounded-xl px-2 py-2.5 text-center text-[11px] font-bold transition-colors sm:text-sm ${
                   activeTab === tab.id ? 'bg-emerald-600 text-white' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
                 }`}
@@ -124,7 +128,7 @@ export default function RiderJob() {
                 <TripCard
                   key={job.id}
                   delivery={job}
-                  actionLabel={activeTab === 'requests' ? 'Accept' : activeTab === 'active' ? 'Open' : 'View'}
+                   actionLabel={activeTab === 'requests' ? 'Accept ride' : activeTab === 'active' ? 'Open' : 'View'}
                   actionTo={activeTab === 'requests' ? undefined : `/rider/job/${job.id}`}
                   onAction={activeTab === 'requests' ? () => accept(job.id) : undefined}
                   onSecondary={activeTab === 'requests' ? () => reject(job.id) : undefined}
