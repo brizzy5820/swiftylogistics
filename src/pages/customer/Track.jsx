@@ -391,7 +391,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
     <>
       {/* ── Mobile: full-bleed map with a draggable bottom sheet ── */}
    <div className="lg:hidden h-full">
-   <div className="relative h-[50vh] sm:h-[60vh] z-10">
+   <div className={`fixed inset-x-0 top-0 z-100 lg:hidden ${sheetDragging ? '' : 'transition-[bottom] duration-200 ease-out'}`}>
     {/* Map fills the screen from the top down to wherever the drawer
         currently starts. bottom = sheetHeightPx, so dragging the sheet
         down shrinks its height -> bottom shrinks -> map grows, and
