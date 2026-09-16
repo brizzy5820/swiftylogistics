@@ -25,7 +25,8 @@ import { AppShell } from '@/components/app-shell'
 import { BottomSheet } from '@/components/bottom-sheet'
 import { PageHeader } from '@/components/page-header'
 import { useRequireAuth } from '@/lib/use-require-auth'
-import { signOut, updateCurrentUser, useStore, STATUS_LABEL } from '@/lib/mock-store'
+import { signOut, useStore, STATUS_LABEL } from '@/lib/mock-store'
+import { updateMe, logout as apiLogout } from '@/services/api'
 import { readImageAsDataUrl } from '@/lib/image'
 
 const SECTIONS = [
@@ -98,7 +99,7 @@ export default function Account() {
   const recentDeliveries = [...deliveries].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)).slice(0, 4)
 
   const handleLogout = () => {
-    signOut()
+    apiLogout()
     navigate('/auth')
   }
 
@@ -324,8 +325,7 @@ function ProfilePanel({ user, totalOrders, deliveredOrders, activeOrders, startE
   }, [startEditing])
 
   function saveProfile() {
-    // Email intentionally excluded — it's locked and not sent in the update.
-    updateCurrentUser({ name: name.trim() || user.name })
+    updateMe({ name: name.trim() || user.name })
     setNewPassword('')
     setEditing(false)
     setNotice(newPassword ? 'Profile updated. Password captured for this demo.' : 'Profile updated.')

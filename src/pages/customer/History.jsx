@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   ArrowLeft,
   CheckCircle,
@@ -8,12 +8,14 @@ import {
   Package,
   Route as RouteIcon,
   Scale,
+  LoaderCircle,
 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { BottomSheet } from '@/components/bottom-sheet'
 import { TripCard } from '@/components/trip-card'
 import { useRequireAuth } from '@/lib/use-require-auth'
 import { STATUS_LABEL, useStore } from '@/lib/mock-store'
+import { getDeliveries } from '@/services/api'
 
 const STATUS_STYLES = {
   pending: { badge: 'bg-orange-100 text-orange-700', dot: 'bg-orange-500', rail: 'bg-orange-500' },
@@ -43,6 +45,17 @@ export default function History() {
   const deliveries = useStore((s) => (user ? s.deliveries.filter((d) => d.customerId === user.id) : []))
   const [activeDelivery, setActiveDelivery] = useState(null)
   const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!user) return undefined
+    let cancelled = false
+    setLoading(true)
+    getDeliveries().finally(() => {
+      if (!cancelled) setLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [user?.id])
 
   if (!user) return null
 
@@ -81,7 +94,12 @@ export default function History() {
         </div> */}
 
         <section className="mt-6 space-y-3">
-          {deliveries.length === 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white p-10 text-sm text-slate-500">
+              <LoaderCircle className="h-5 w-5 animate-spin" />
+              Loading your activity...
+            </div>
+          ) : deliveries.length === 0 ? (
             <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
                 <Package className="h-6 w-6" />
@@ -117,7 +135,7 @@ export default function History() {
                 type="button"
                 onClick={() => {
                   setOpen(false)
-                  navigate('/customer/track/' + activeDelivery.id)
+                  navigate('/customer/track/' + activeDelivery.trackingId)
                 }}
                 className="w-full rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500"
               >

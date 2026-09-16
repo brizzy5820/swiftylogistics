@@ -8,7 +8,8 @@ import {
 import { AppShell } from '@/components/app-shell'
 import { MobileRouteMap, RouteMapPanel } from '@/components/mobile-route-map'
 import { useRequireAuth } from '@/lib/use-require-auth'
-import { createDelivery, useStore } from '@/lib/mock-store'
+import { useStore } from '@/lib/mock-store'
+import { createAddress, createDelivery } from '../../services/api'
 import { reverseGeocode } from '@/lib/address-suggestions'
 
 
@@ -544,19 +545,45 @@ export default function Book() {
     setStep((s) => Math.min(s + 1, 2))
   }
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
-    const delivery = createDelivery({
-      customerId:   user.id,
-      customerName: user.name,
-      pickup:  { address: confirmedPickup,  coords: pickupCoords },
-      dropoff: { address: confirmedDropoff, coords: dropoffCoords },
-      packageType: pkg,
-      weightKg: weight,
-      note: note.trim(),
-    })
-    navigator.clipboard?.writeText(delivery.trackingId)
-    navigate('/customer/track/' + delivery.id)
+    try {
+      const [pickup, dropoff] = await Promise.all([
+        createAddress({
+          label: 'Pickup',
+          addressLine: confirmedPickup,
+          city: 'Lagos',
+          state: 'Lagos',
+          coordinates: {
+            latitude: pickupCoords.lat,
+            longitude: pickupCoords.lng,
+          },
+        }),
+        createAddress({
+          label: 'Drop-off',
+          addressLine: confirmedDropoff,
+          city: 'Lagos',
+          state: 'Lagos',
+          coordinates: {
+            latitude: dropoffCoords.lat,
+            longitude: dropoffCoords.lng,
+          },
+        }),
+      ])
+
+      const delivery = await createDelivery({
+        pickupAddress: pickup._id || pickup.id,
+        dropoffAddress: dropoff._id || dropoff.id,
+        packageType: pkg,
+        weightKg: weight,
+        note: note.trim(),
+      })
+
+      navigator.clipboard?.writeText(delivery.trackingId)
+      navigate('/customer/track/' + activeDelivery.trackingId)
+    } catch (error) {
+      window.alert(error.message || 'Unable to create delivery.')
+    }
   }
 
   /* ════════════════════════════════════════════

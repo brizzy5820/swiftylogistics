@@ -1,6 +1,5 @@
 
 import bcrypt from "bcrypt";
-
 import User from "../models/User.js";
 import AppError from "../utils/AppError.js";
 import { generateAccessToken} from "../utils/jwt.js"
@@ -12,6 +11,7 @@ import {generateRefreshToken,hashRefreshToken,} from "../utils/refreshToken.js";
   email,
   password,
   phone,
+  role,
 }) => {
   const normalizedEmail = email.toLowerCase().trim();
 
@@ -34,9 +34,11 @@ import {generateRefreshToken,hashRefreshToken,} from "../utils/refreshToken.js";
       email: normalizedEmail,
       passwordHash,
       phone,
+      role,
     });
-
+const accessToken = generateAccessToken(user);
     return {
+      accessToken,
       id: user._id,
       name: user.name,
       email: user.email,
@@ -56,28 +58,47 @@ import {generateRefreshToken,hashRefreshToken,} from "../utils/refreshToken.js";
   }
 };
 // User login
- const loginUser = async ({email, password})=>{
-  const normalizeEmail =   email.toLowerCase().trim()
-const user = await User.findOne({email:normalizeEmail})
+const loginUser = async ({ email, password }) => {
+  const normalizedEmail = email.toLowerCase().trim();
 
-if (!user){
-  throw new AppError ("Invalid email or Password",401)
-}
-const matchPassword = await bcrypt.compare(password, user.passwordHash)
-if(!matchPassword){
-  throw new AppError("Invalid email or Password",401)
-}
-  const accessToken = generateAccessToken(user)
-  return{
-    accessToken,
-    id: user._id,
-    email:user.email,
-    phone:user.phone,
-    name:user.name,
-    role: user.role,
+  const user = await User.findOne({
+    email: normalizedEmail,
+  });
 
+  if (!user) {
+    throw new AppError(
+      "Invalid email or password",
+      401
+    );
   }
- }
+
+  const passwordMatches = await bcrypt.compare(
+    password,
+    user.passwordHash
+  );
+
+  if (!passwordMatches) {
+    throw new AppError(
+      "Invalid email or password",
+      401
+    );
+  }
+
+  const accessToken = generateAccessToken(user);
+
+  return {
+    accessToken,
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+    },
+  };
+};
+
+
  const createRefreshToken = async (userId) => {
   const token = generateRefreshToken();
 

@@ -5,12 +5,10 @@ import { useRequireAuth } from '../../lib/use-require-auth'
 import { AppShell } from '../../components/app-shell'
 
 const ACTIONS = [
-  { to: '/customer/ride', title: 'Book a ride', subtitle: 'A car is minutes away', primary: true, image: '/ride.png', Icon: CarFront },
-  { to: '/customer/book', title: 'Send a package', subtitle: 'Pickup and delivery now', image: '/deliveryguy.png', Icon: PackageCheck },
+  { to: '/customer/ride', title: 'Book a ride', subtitle: 'A car is minutes away', image: '/sedan.png', Icon: CarFront },
+  { to: '/customer/book', title: 'Send a package', subtitle: 'Pickup & delivery', image: '/delivery-man.png', Icon: PackageCheck },
   { to: '/customer/schedule', title: 'Schedule delivery', subtitle: 'Plan it for later', image: '/pickedup.png', Icon: Calendar },
-  { to: '/customer/book?mode=intercity', title: 'Intercity delivery', subtitle: 'Across town or further', image: '/bgimg.png', Icon: Send },
-  { to: '/customer/book?mode=cargo', title: 'Cargo & large items', subtitle: 'Bigger loads, same care', image: '/blush.png', Icon: PackageCheck },
-  { to: '/customer/track', title: 'Track an order', subtitle: 'Follow it live', image: '/formimg.png', Icon: MapPin },
+  { to: '/customer/track', title: 'Track an order', subtitle: 'Follow it live', image: '/track-order.png', Icon: MapPin },
 ]
 
 export default function Actions() {
@@ -25,37 +23,13 @@ export default function Actions() {
       <main className="px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
         <div className="mx-auto max-w-5xl space-y-5">
           <div>
-            <h1 className="font-display text-2xl font-black tracking-tight sm:text-3xl">Hi {firstName}</h1>
+            <h1 className="font-display text-2xl font-black tracking-tight sm:text-3xl">Actions</h1>
             <p className="mt-1 text-sm text-slate-500">Everything you can do on Swifty in one place.</p>
           </div>
 
-          {/* Search */}
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Where to?"
-              className="w-full rounded-2xl border border-slate-200 bg-white py-3.5 pl-11 pr-4 text-sm font-semibold shadow-sm outline-none transition focus:border-emerald-500"
-            />
-          </div>
-
-          {/* Hero card */}
-          <div className="relative overflow-hidden rounded-3xl bg-slate-950 p-6 text-white">
-            <div className="relative z-10 flex items-end justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-emerald-300">Quick start</p>
-                <h2 className="mt-2 font-display text-2xl font-black tracking-tight sm:text-3xl">Move something today</h2>
-                <p className="mt-1 text-sm text-slate-400">{activeDeliveries} active · {scheduled.length} scheduled</p>
-              </div>
-              <Link to="/customer/ride" className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-400">
-                Book a ride <ArrowUpRight className="h-4 w-4" />
-              </Link>
-            </div>
-          </div>
-
           {/* All actions grid */}
-          <section>
-            <h3 className="mb-3 font-display text-lg font-bold">Suggestions</h3>
+          <section className=' pt-5'>
+
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {ACTIONS.map((a) => (
                 <Link
@@ -67,7 +41,7 @@ export default function Actions() {
                       : 'border-slate-200 bg-white text-slate-900 hover:shadow-lg'
                   }`}
                 >
-                  <span className={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl ${a.primary ? 'bg-white/15' : 'bg-emerald-50'}`}>
+                  <span className={`flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl ${a.primary ? 'text-white/15' : 'text-emerald-50'}`}>
                     <img src={a.image} alt="" className="h-full w-full object-cover" />
                   </span>
                   <span className="min-w-0">

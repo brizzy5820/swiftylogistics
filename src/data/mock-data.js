@@ -1,8 +1,8 @@
 // Mock domain data. Replace this module with API responses without changing UI components.
 export const MOCK_SERVICES = [
-  { id: 'ride', title: 'Ride', description: 'Get a car when you need to move.', icon: 'car', href: '/customer/ride', accent: 'green', image: '/ride.png' },
-  { id: 'delivery', title: 'Send a package', description: 'Fast pickup and doorstep delivery.', icon: 'package', href: '/customer/book', accent: 'emerald', image: '/pickedup.png' },
-  { id: 'pickup', title: 'Pickup & drop-off', description: 'Move documents, items and errands.', icon: 'route', href: '/customer/book', accent: 'lime', image: '/deliveryguy.png' },
+  { id: 'ride', title: 'Ride', description: 'Get a car when you need to move.', icon: 'car', href: '/customer/ride', accent: 'green', image: '/ride.jpg' },
+  { id: 'delivery', title: 'Send a package', description: 'Fast pickup and doorstep delivery.', icon: 'package', href: '/customer/book', accent: 'emerald', image: '/pickedup.jpg' },
+  { id: 'pickup', title: 'Pickup & drop-off', description: 'Move documents, items and errands.', icon: 'route', href: '/customer/book', accent: 'lime', image: '/deliveryguy.jpg' },
   // { id: 'business', title: 'Business', description: 'Manage recurring trips and deliveries.', icon: 'briefcase', href: '/customer/book', accent: 'slate', image: '/fleet-dashboard.jfif' },
 ]
 

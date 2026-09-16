@@ -5,6 +5,7 @@ import { AppShell } from '@/components/app-shell'
 import { DeliveryMap } from '@/components/delivery-map'
 import { MobileDrawer } from '@/components/mobile-drawer'
 import { TripCard } from '@/components/trip-card'
+import { getDelivery } from '@/services/api'
 // Trip tracking is publicly viewable by code; only the "my trips" list requires sign-in.
 import { useStore, updateDeliveryStatus, STATUS_LABEL, getCurrentUser } from '@/lib/mock-store'
 
@@ -15,7 +16,7 @@ function formatTime(ts) {
 
 export default function Track() {
   const user = getCurrentUser()
-  const { id } = useParams()
+  const { trackingId: routeTrackingId } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
   const [copied, setCopied] = useState(false)
@@ -23,9 +24,9 @@ export default function Track() {
   const [trackingCode, setTrackingCode] = useState('')
   const [outcomeBannerDismissed, setOutcomeBannerDismissed] = useState(false)
   const deliveries = useStore((s) => (user ? s.deliveries.filter((d) => d.customerId === user.id) : []))
-  const delivery = useStore((s) => s.deliveries.find((d) => d.id === id || d.trackingId === id))
-  const trackingId = location.state?.trackingId ?? delivery?.trackingId ?? id
-  const deliveryId = delivery?.id
+  const delivery = useStore((s) => s.deliveries.find((d) => d.trackingId === routeTrackingId))
+  const trackingId = location.state?.trackingId ?? delivery?.trackingId ?? routeTrackingId
+  const deliveryId = delivery?.trackingId
   const searchParams = new URLSearchParams(location.search)
   const requestedTab = searchParams.get('tab')
 // top of Track component, alongside your other state
@@ -40,9 +41,12 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
 
   useEffect(() => {
     setLookupSettled(false)
+    if (routeTrackingId && !delivery) {
+      getDelivery(routeTrackingId).catch(() => null)
+    }
     const timeout = window.setTimeout(() => setLookupSettled(true), 600)
     return () => window.clearTimeout(timeout)
-  }, [id])
+  }, [routeTrackingId, delivery])
 
   useEffect(() => {
     if (!copied) return
@@ -66,7 +70,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
     navigate(`/customer/track/${encodeURIComponent(value)}`, { state: { trackingId: value } })
   }
 
-  if (!user && !id) {
+  if (!user && !routeTrackingId) {
     return (
       <AppShell>
         <main className="mx-auto flex min-h-[60vh] max-w-3xl flex-col items-center justify-center px-6 py-12 text-center">
@@ -82,7 +86,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
   }
 
   const handleBack = () => {
-     if(id){
+    if(routeTrackingId){
         navigate('/customer/history')
     }
     else if (window.history.state && window.history.state.idx > 0) {
@@ -93,7 +97,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
    
   }
 
-  if (!id) {
+  if (!routeTrackingId) {
     const orderedDeliveries = [...deliveries].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
     const tabDefinitions = [
       {
@@ -184,7 +188,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
               </div>
             ) : (
               displayedDeliveries.map((item) => (
-                <TripCard key={item.id} delivery={item} actionTo={`/customer/track/${item.id}`} />
+                <TripCard key={item.id} delivery={item} actionTo={`/customer/track/${item.trackingId}`} />
               ))
             )}
           </div>
@@ -235,7 +239,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
   const currentIdx = steps.findIndex((s) => s.key === delivery.status)
 
   function handleCancel() {
-    updateDeliveryStatus(delivery.id, 'cancelled')
+    updateDeliveryStatus(delivery.trackingId, 'cancelled')
   }
 
   const banner = !outcomeBannerDismissed && isDelivered ? (
@@ -383,7 +387,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
   const livePill = (
     <div className="flex items-center gap-2 rounded-full px-4">
       <div className={`size-2 rounded-full ${isCancelled ? 'bg-red-400' : isDelivered ? 'bg-emerald-500' : 'bg-emerald-500 animate-pulse'}`} />
-      <span className="text-2xs text-gray-100 lg:text-black font-bold">Live · {delivery.id}</span>
+      <span className="text-2xs text-gray-100 lg:text-black font-bold">Live · {delivery.trackingId}</span>
     </div>
   )
 
@@ -420,7 +424,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
       >
         <ArrowLeft className="h-4 w-4" />
       </button>
-      {livePill}
+    
     </div>
   </div>
 
@@ -432,7 +436,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
     onHeightChange={handleSheetHeightChange}
   >
     <DetailPanel />
-  </MobileDrawer>
+  </MobileDrawer>4
 </div>
       {/* ── Desktop: side-by-side grid (no drag — real layout space, not a floating sheet) ── */}
       <main className="hidden px-4 mt-4 sm:px-6 lg:px-8 py-6 max-w-7xl lg:py-3 mx-auto lg:block">
@@ -440,7 +444,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
         {banner && <div className="mb-6">{banner}</div>}
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <aside className="lg:col-span-4 space-y-6 overflow-y-auto max-h-[calc(100vh-7rem)]">
+            <aside className="lg:col-span-4 space-y-6 overflow-y-auto h-screen">
            
           <div className='flex '>   
           <button
@@ -449,7 +453,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
             aria-label="Go back"
             className="inline-flex h-10 w-10 items-center justify-center text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-6 w-6" />
           </button>  {livePill}</div>   
               <DetailPanel />
             </aside>

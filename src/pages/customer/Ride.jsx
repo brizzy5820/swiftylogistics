@@ -6,14 +6,15 @@ import { AppShell } from '../../components/app-shell'
 import { DeliveryMap } from '../../components/delivery-map'
 import { MobileDrawer } from '../../components/mobile-drawer'
 import { useRequireAuth } from '../../lib/use-require-auth'
-import { assignAvailableRider, createRide, updateDeliveryStatus, useStore } from '../../lib/mock-store'
+import { updateDeliveryStatus, useStore } from '../../lib/mock-store'
+import { assignRide, createAddress, createRide  } from '@/services/api'
 import { MOCK_RIDE_OPTIONS } from '../../data/mock-data'
 import { ADDRESS_SUGGESTIONS, fetchLagosSuggestions, resolveAddressCoords, reverseGeocode } from '../../lib/address-suggestions'
 
 
 const LAGOS = { lat: 6.5244, lng: 3.3792 }
 
-function RiderSearchDrawer({ rider, onCancel, onConfirm, onHeightChange }) {
+function RiderSearchDrawer({ rider, noDriver, onCancel, onConfirm, onHeightChange }) {
   const cardRef = useRef(null)
 
   const riderContent = rider ? (
@@ -32,6 +33,18 @@ function RiderSearchDrawer({ rider, onCancel, onConfirm, onHeightChange }) {
           {rider.phone && <p className="mt-0.5 text-xs text-slate-400">{rider.phone}</p>}
         </div>
         <span className="text-sm font-bold text-amber-500">★ {rider.rating || '5.0'}</span>
+      </div>
+    </div>
+  ) : noDriver ? (
+    <div className="p-1">
+      <div className="flex items-start gap-3">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+          <span className="text-3xl font-black">!</span>
+        </div>
+        <div>
+          <h2 className="font-display text-xl font-black uppercase text-slate-950">NO driver FOund at the moment</h2>
+          <p className="mt-1 text-sm text-slate-500">There are no active drivers available right now.</p>
+        </div>
       </div>
     </div>
   ) : (
@@ -54,6 +67,10 @@ function RiderSearchDrawer({ rider, onCancel, onConfirm, onHeightChange }) {
   const footer = rider ? (
     <button type="button" onClick={onConfirm} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-400">
       Confirm ride <ArrowRight className="h-4 w-4" />
+    </button>
+  ) : noDriver ? (
+    <button type="button" onClick={onCancel} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+      <X className="h-4 w-4" /> Close
     </button>
   ) : (
     <button type="button" onClick={onCancel} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-200 py-3 text-sm font-bold text-red-600 transition hover:bg-red-50">
@@ -177,7 +194,7 @@ function LocationField({ variant, value, onChange, onCoords, placeholder }) {
     }
   }, [value])
 
-  function useMyLocation() {
+  function handleUseMyLocation() {
     if (!geoReady) return
     onCoords?.(geoCoordsRef.current)
     onChange(geoLabel)
@@ -227,7 +244,7 @@ function LocationField({ variant, value, onChange, onCoords, placeholder }) {
         ) : isPickup ? (
           <button
             type="button"
-            onMouseDown={(e) => { e.preventDefault(); useMyLocation() }}
+            onMouseDown={(e) => { e.preventDefault(); handleUseMyLocation() }}
             className="flex h-6 w-6 shrink-0 items-center justify-center text-slate-900 disabled:text-slate-300"
             disabled={!geoReady}
             aria-label="Use current location"
@@ -245,7 +262,7 @@ function LocationField({ variant, value, onChange, onCoords, placeholder }) {
           {geoReady && isPickup && (
             <button
               type="button"
-              onClick={() => useMyLocation()}
+              onClick={handleUseMyLocation}
               className="flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left hover:bg-emerald-50"
             >
               <Navigation className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
@@ -289,6 +306,7 @@ export default function Ride() {
   const [loading, setLoading] = useState(false)
   const [searchingRideId, setSearchingRideId] = useState(null)
   const [matchedRider, setMatchedRider] = useState(null)
+  const [noDriver, setNoDriver] = useState(false)
 
   // How much of the screen a mobile bottom sheet is currently occupying
   // (real measured px, reported by MobileDrawer / RiderSearchDrawer). The
@@ -324,15 +342,17 @@ export default function Ride() {
     let cancelled = false
     let pollTimer
 
-    const findRider = () => {
+    const findRider = async () => {
       if (cancelled) return
-      const matched = assignAvailableRider(searchingRideId)
+      const matched = await assignRide(searchingRideId).catch(() => null)
+      if (cancelled) return
       if (matched?.riderId) {
         setSearchingRideId(null)
         setMatchedRider(matched)
         return
       }
-      pollTimer = window.setTimeout(findRider, 3000)
+      setNoDriver(true)
+      setSearchingRideId(null)
     }
 
     const startTimer = window.setTimeout(findRider, 3000)
@@ -342,8 +362,6 @@ export default function Ride() {
       window.clearTimeout(pollTimer)
     }
   }, [searchingRideId, navigate])
-  if (!user) return null
-
   // Keep the map markers in sync with whatever the user types.
   const t1 = useRef(null)
   useEffect(() => {
@@ -365,19 +383,28 @@ export default function Ride() {
     return () => t2.current && clearTimeout(t2.current)
   }, [dropoff])
 
-  function confirmRide() {
+  if (!user) return null
+
+  async function confirmRide() {
     setLoading(true)
-    const order = createRide({
-      customerId: user.id,
-      customerName: user.name,
-      pickup: { address: pickup || 'My location', coords: pickupCoords },
-      dropoff: { address: dropoff, coords: dropoffCoords || LAGOS },
-      rideType: option.id,
-      fare: option.price,
-    })
-    setLoading(false)
-    setShowModal(false)
-    setSearchingRideId(order.id)
+    try {
+      const [pickupAddress, dropoffAddress] = await Promise.all([
+        createAddress({ label: 'Ride pickup', addressLine: pickup || 'My location', city: 'Lagos', state: 'Lagos', coordinates: { latitude: pickupCoords?.lat ?? LAGOS.lat, longitude: pickupCoords?.lng ?? LAGOS.lng } }),
+        createAddress({ label: 'Ride drop-off', addressLine: dropoff, city: 'Lagos', state: 'Lagos', coordinates: { latitude: dropoffCoords?.lat ?? LAGOS.lat, longitude: dropoffCoords?.lng ?? LAGOS.lng } }),
+      ])
+      const order = await createRide({
+        pickupAddress: pickupAddress._id || pickupAddress.id,
+        dropoffAddress: dropoffAddress._id || dropoffAddress.id,
+        rideType: option.id,
+      })
+      setShowModal(false)
+      setNoDriver(false)
+      setSearchingRideId(order.id)
+    } catch (error) {
+      window.alert(error.message || 'Unable to start the ride.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   function cancelRiderSearch() {
@@ -385,6 +412,7 @@ export default function Ride() {
     if (rideId) updateDeliveryStatus(rideId, 'cancelled')
     setSearchingRideId(null)
     setMatchedRider(null)
+    setNoDriver(false)
   }
   function cancelRidePick() {
 
@@ -474,7 +502,7 @@ export default function Ride() {
       {/* Mobile confirmation: a single persistent map, pushed up by whichever
           sheet is currently open, so pickup/dropoff markers stay visible
           and never end up hidden behind the sheet. */}
-      {(showModal || searchingRideId || matchedRider) && (
+      {(showModal || searchingRideId || matchedRider || noDriver) && (
         <>
           <div
             className={`fixed inset-x-0 top-0 z-100 lg:hidden ${sheetDragging ? '' : 'transition-[bottom] duration-200 ease-out'}`}
@@ -541,9 +569,10 @@ export default function Ride() {
           )}
         </>
       )}
-      {(searchingRideId || matchedRider) && (
+      {(searchingRideId || matchedRider || noDriver) && (
         <RiderSearchDrawer
           rider={matchedRider ? liveRider || { name: matchedRider.riderName } : null}
+          noDriver={noDriver}
           onCancel={cancelRiderSearch}
           onConfirm={confirmMatchedRide}
           onHeightChange={handleSheetHeightChange}

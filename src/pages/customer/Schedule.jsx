@@ -6,7 +6,6 @@ import { scheduleDelivery, cancelScheduled, useStore } from '../../lib/mock-stor
 import { AppShell } from '../../components/app-shell'
 import { DeliveryMap } from '../../components/delivery-map'
 import { resolveAddressCoords, reverseGeocode } from '../../lib/address-suggestions'
-import { MOCK_DASHBOARD_STATS } from '../../data/mock-data'
 
 const PACKAGE_TYPES = ['Express', 'Standard', 'Cargo']
 const TIME_SLOTS = [

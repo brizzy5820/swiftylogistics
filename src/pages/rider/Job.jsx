@@ -5,7 +5,8 @@ import { AppShell } from '@/components/app-shell'
 import { DeliveryMap } from '@/components/delivery-map'
 import { TripCard } from '@/components/trip-card'
 import { useRequireAuth } from '@/lib/use-require-auth'
-import { useStore, updateDeliveryStatus, advanceCourier, STATUS_LABEL } from '@/lib/mock-store'
+import { STATUS_LABEL } from '@/lib/mock-store'
+import { getDeliveries, updateRiderDeliveryStatus } from '@/services/api'
 
 const NEXT = {
   accepted: { next: 'picked_up', label: 'Mark as picked up' },
@@ -24,34 +25,38 @@ export default function RiderJob() {
   const navigate = useNavigate()
   const location = useLocation()
   const { id } = useParams()
-  const [autoMove, setAutoMove] = useState(true)
+  const [deliveries, setDeliveries] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   const searchParams = new URLSearchParams(location.search)
   const requestedTab = searchParams.get('tab')
   const activeTab = TABS.some((t) => t.id === requestedTab) ? requestedTab : 'requests'
 
-  const delivery = useStore((s) => s.deliveries.find((d) => d.id === id))
-  const incoming = useStore((s) => s.deliveries.filter((d) => d.status === 'pending' && (!d.riderId || d.riderId === user?.id)))
-  const activeJobs = useStore((s) =>
-    user ? s.deliveries.filter((d) => d.riderId === user.id && ['accepted', 'picked_up', 'in_transit'].includes(d.status)) : [],
-  )
-  const completed = useStore((s) =>
-    user ? s.deliveries.filter((d) => d.riderId === user.id && d.status === 'delivered') : [],
-  )
-
   useEffect(() => {
-    if (!delivery || delivery.status !== 'in_transit' || !autoMove) return
-    let frac = 0
-    const iv = setInterval(() => {
-      frac += 0.05
-      if (frac >= 1) {
-        clearInterval(iv)
-      } else {
-        advanceCourier(id, frac)
-      }
-    }, 1500)
-    return () => clearInterval(iv)
-  }, [delivery?.status, id, autoMove])
+    if (!user) return undefined
+    let cancelled = false
+    setLoading(true)
+    setError('')
+    getDeliveries()
+      .then((nextDeliveries) => {
+        if (!cancelled) setDeliveries(nextDeliveries)
+      })
+      .catch((requestError) => {
+        if (!cancelled) setError(requestError.message || 'Unable to load jobs.')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [user?.id])
+
+  const delivery = deliveries.find((job) => job.id === id)
+  const incoming = deliveries.filter((job) => job.status === 'pending' && (!job.riderId || job.riderId === user?.id))
+  const activeJobs = user
+    ? deliveries.filter((job) => job.riderId === user.id && ['accepted', 'picked_up', 'in_transit'].includes(job.status))
+    : []
+  const completed = user ? deliveries.filter((job) => job.riderId === user.id && job.status === 'delivered') : []
 
   const visibleJobs = useMemo(() => {
     if (activeTab === 'active') return activeJobs
@@ -69,13 +74,23 @@ export default function RiderJob() {
     }
   }
 
-  function accept(jobId) {
-    updateDeliveryStatus(jobId, 'accepted', user.id, user.name)
-    navigate('/rider/job?tab=active')
+  async function accept(jobId) {
+    try {
+      const updated = await updateRiderDeliveryStatus(jobId, 'accepted')
+      setDeliveries((current) => current.map((job) => job.id === updated.id ? updated : job))
+      navigate('/rider/job?tab=active')
+    } catch (requestError) {
+      setError(requestError.message || 'Unable to accept this job.')
+    }
   }
 
-  function reject(jobId) {
-    updateDeliveryStatus(jobId, 'cancelled')
+  async function reject(jobId) {
+    try {
+      const updated = await updateRiderDeliveryStatus(jobId, 'cancelled')
+      setDeliveries((current) => current.map((job) => job.id === updated.id ? updated : job))
+    } catch (requestError) {
+      setError(requestError.message || 'Unable to reject this job.')
+    }
   }
 
   if (!id) {
@@ -114,8 +129,11 @@ export default function RiderJob() {
             ))}
           </div>
 
+          {error ? <p className="mb-4 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p> : null}
           <section className="space-y-3">
-            {visibleJobs.length === 0 ? (
+            {loading ? (
+              <p className="py-10 text-center text-sm text-slate-500">Loading jobs...</p>
+            ) : visibleJobs.length === 0 ? (
               <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
                 <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
                   <Briefcase className="h-6 w-6" />
@@ -190,8 +208,11 @@ export default function RiderJob() {
             {nextStep ? (
               <button
                 onClick={() => {
-                  updateDeliveryStatus(id, nextStep.next)
-                  if (nextStep.next === 'in_transit') setAutoMove(true)
+                  updateRiderDeliveryStatus(id, nextStep.next)
+                    .then((updated) => {
+                      setDeliveries((current) => current.map((job) => job.id === updated.id ? updated : job))
+                    })
+                    .catch((requestError) => setError(requestError.message || 'Unable to update this job.'))
                 }}
                 className="w-full rounded-xl bg-emerald-600 py-3 font-bold text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-500"
               >

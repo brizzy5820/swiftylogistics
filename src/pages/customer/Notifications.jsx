@@ -1,9 +1,10 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { useMemo, useState } from 'react'
-import { Bell, Clock3, PackageCheck, Truck, ArrowLeft } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Bell, Clock3, PackageCheck, Truck, ArrowLeft, LoaderCircle } from 'lucide-react'
 import { AppShell} from '@/components/app-shell'
 import { useRequireAuth } from '@/lib/use-require-auth'
 import { useStore } from '@/lib/mock-store'
+import { getDeliveries } from '@/services/api'
 
 const NOTIFICATION_READ_KEY = 'swifty-notifications-read-at'
 
@@ -32,7 +33,18 @@ export default function NotificationsPage() {
     if (typeof window === 'undefined') return 0
     return Number(window.localStorage.getItem(NOTIFICATION_READ_KEY)) || 0
   })
+  const [loading, setLoading] = useState(true)
   const deliveries = useStore((s) => (user ? s.deliveries.filter((d) => d.customerId === user.id) : []))
+
+  useEffect(() => {
+    if (!user) return undefined
+    let cancelled = false
+    setLoading(true)
+    getDeliveries().finally(() => {
+      if (!cancelled) setLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [user?.id])
 
   const notifications = useMemo(() => {
     if (!deliveries.length) return []
@@ -109,20 +121,19 @@ export default function NotificationsPage() {
     }
   }
   return (
-    <AppShell>
-      <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
-         <button
-            type="button"
-            onClick={handleBack}
-            aria-label="Go back"
-            className="mb-5 inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
+    <AppShell hideMobileHeader>
+      <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="mb-6 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Notifications</p>
-            <h1 className="text-2xl font-bold text-slate-900">Recent activity</h1>
+          <div className='flex gap-3 item-center'>
+            <button
+              type="button"
+              onClick={handleBack}
+              aria-label="Go back"
+              className=" inline-flex  items-center justify-center rounded-full  text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+            >
+              <ArrowLeft className="h-6 w-6" />
+            </button>{" "}
+            <h1 className="text-2xl font-bold text-slate-900">Notification</h1>
           </div>
           {notifications.length > 0 && (
             <button
@@ -135,20 +146,27 @@ export default function NotificationsPage() {
           )}
         </div>
 
-        {notifications.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white p-10 text-sm text-slate-500 shadow-sm">
+            <LoaderCircle className="h-5 w-5 animate-spin" />
+            Loading your notifications...
+          </div>
+        ) : notifications.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
               <Bell className="h-6 w-6" />
             </div>
             <h2 className="mt-4 text-lg font-semibold text-slate-900">No activity yet</h2>
-            <p className="mt-2 text-sm text-slate-500">Your shipment updates will appear here once a booking is created.</p>
+            <p className="mt-2 text-sm text-slate-500">
+              Your shipment updates will appear here once a booking is created.
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
             {notifications.map((item, index) => {
-              const Icon = item.icon
-              const group = dayGroup(item.time)
-              const showHeader = index === 0 || group !== dayGroup(notifications[index - 1].time)
+              const Icon = item.icon;
+              const group = dayGroup(item.time);
+              const showHeader = index === 0 || group !== dayGroup(notifications[index - 1].time);
               return (
                 <div key={item.id}>
                   {showHeader && (
@@ -158,8 +176,12 @@ export default function NotificationsPage() {
                   )}
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="flex items-start gap-3">
-                      <div className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${Number(item.time) > readAt ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-600'}`}>
-                        {Number(item.time) > readAt && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />}
+                      <div
+                        className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${Number(item.time) > readAt ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-600"}`}
+                      >
+                        {Number(item.time) > readAt && (
+                          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
+                        )}
                         <Icon className="h-5 w-5" />
                       </div>
                       <div className="min-w-0 flex-1">
@@ -175,11 +197,11 @@ export default function NotificationsPage() {
                     </div>
                   </div>
                 </div>
-              )
+              );
             })}
           </div>
         )}
       </main>
     </AppShell>
-  )
+  );
 }

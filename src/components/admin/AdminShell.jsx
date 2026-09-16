@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Users, Bike, CarFront, PackageCheck, LifeBuoy, LogOut, User } from 'lucide-react'
 import { getCurrentUser, signOut } from '../../lib/mock-store'
-import { SwiftyLogo } from './SwiftyLogo'
 import { useAdminTheme, AdminThemeToggle } from './AdminThemeToggle'
 
 const ADMIN_LINKS = [
@@ -40,7 +39,7 @@ export function AdminShell({ children }) {
         <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-emerald-700/40 bg-emerald-900 text-white shadow-xl lg:flex">
           <div className="flex h-20 items-center px-6">
             <Link to="/admin" className="flex items-center">
-             <img src="/public/logonobg.png" alt="" className="w-13 h-13" /><span className="font-courier font-semibold">Wifty</span>
+             <img src="/logonobg.png" alt="" className="w-13 h-13" /><span className="font-courier font-semibold">Wifty</span>
             </Link>
           </div>
           <nav className="flex-1 space-y-1 p-4">
@@ -85,7 +84,7 @@ export function AdminShell({ children }) {
         {/* Mobile top bar — dark in dark mode, emerald in light mode */}
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-white/10 bg-emerald-600 px-4 text-white shadow-sm sm:px-6 lg:hidden">
           <Link to="/admin" className="flex items-center">
-            <SwiftyLogo variant="light" />
+                <img src="/logonobg.png" alt="" className="w-13 h-13" /><span className="font-courier font-semibold">Wifty</span>
           </Link>
           <div className="flex items-center gap-2">
             <AdminThemeToggle theme={theme} setTheme={setTheme} />

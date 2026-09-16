@@ -74,23 +74,8 @@ function seedDeliveries() {
 }
 
 function defaultStore() {
-  // Seed a single admin account so the operations portal is reachable.
-  // No customer or rider data is seeded — the platform starts empty and
-  // is populated dynamically by real signups and bookings.
   return {
-    users: [
-      {
-        id: 'u-admin-1',
-        uid: 'UID-ADMIN-0001',
-        name: 'Operations Admin',
-        email: 'admin@swifty.app',
-        password: 'admin',
-        role: 'admin',
-        phone: '+234 800 000 0000',
-        department: 'Operations',
-        createdAt: Date.now(),
-      },
-    ],
+    users: [],
     deliveries: [],
     session: null,
     supportTickets: [],
@@ -159,38 +144,11 @@ function persist() {
 function hydrate() {
   if (hydrated || typeof window === 'undefined') return
   hydrated = true
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const { users, deliveries, scheduled, supportTickets } = JSON.parse(raw)
-      store.users = users ?? store.users
-      store.deliveries = deliveries ?? store.deliveries
-      store.scheduled = scheduled ?? store.scheduled ?? []
-      store.supportTickets = supportTickets ?? store.supportTickets ?? []
-    }
-  } catch {}
+  window.localStorage.removeItem(STORAGE_KEY)
   try {
     const rawSession = window.sessionStorage.getItem(SESSION_KEY)
     if (rawSession) store.session = JSON.parse(rawSession)
   } catch {}
-  // Always guarantee the operations admin exists, even on a returning device
-  // whose localStorage predates this seed.
-  if (!store.users.some((u) => u.email.toLowerCase() === 'admin@swifty.app')) {
-    store.users = [
-      ...store.users,
-      {
-        id: 'u-admin-1',
-        uid: 'UID-ADMIN-0001',
-        name: 'Operations Admin',
-        email: 'admin@swifty.app',
-        password: 'admin',
-        role: 'admin',
-        phone: '+234 800 000 0000',
-        department: 'Operations',
-        createdAt: Date.now(),
-      },
-    ]
-  }
   // Backfill UIDs for any existing users that predate this field.
   store.users = store.users.map((u) => u.uid ? u : { ...u, uid: u.uid || generateUid() })
   // Resume courier auto-advance if any trip was in transit at the time
@@ -291,6 +249,17 @@ export function signUp(name, email, role, details = {}) {
 
 export function signOut() {
   store.session = null
+  if (typeof window !== 'undefined') {
+    const token = window.sessionStorage.getItem('swifty_access_token')
+    if (token) {
+      fetch('/api/riders/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ isAvailable: false }),
+      }).catch(() => null)
+    }
+    window.sessionStorage.removeItem('swifty_access_token')
+  }
   emit()
 }
 
@@ -298,6 +267,62 @@ export function getCurrentUser() {
   hydrate()
   if (!store.session) return null
   return store.users.find((u) => u.id === store.session.userId) ?? null
+}
+
+export function setAuthenticatedUser(user) {
+  hydrate()
+  if (!user?.id) return null
+
+  const existing = store.users.find((item) => item.id === String(user.id))
+  const nextUser = {
+    ...(existing ?? {}),
+    ...user,
+    id: String(user.id),
+  }
+
+  store.users = existing
+    ? store.users.map((item) => item.id === nextUser.id ? nextUser : item)
+    : [...store.users, nextUser]
+  store.session = { userId: nextUser.id, role: nextUser.role }
+  emit()
+  return nextUser
+}
+
+export function upsertDelivery(delivery) {
+  hydrate()
+  if (!delivery?.id) return null
+
+  const existing = store.deliveries.some((item) => item.id === delivery.id)
+  store.deliveries = existing
+    ? store.deliveries.map((item) => item.id === delivery.id ? { ...item, ...delivery } : item)
+    : [delivery, ...store.deliveries]
+  emit()
+  return delivery
+}
+
+export function upsertDeliveries(deliveries) {
+  hydrate()
+  if (!Array.isArray(deliveries)) return []
+
+  const incoming = new Map(deliveries.filter((delivery) => delivery?.id).map((delivery) => [delivery.id, delivery]))
+  store.deliveries = [
+    ...incoming.values(),
+    ...store.deliveries.filter((delivery) => !incoming.has(delivery.id)),
+  ]
+  emit()
+  return deliveries
+}
+
+export function upsertUsers(users) {
+  hydrate()
+  if (!Array.isArray(users)) return []
+  const incoming = new Map(users.filter((user) => user?.id).map((user) => [user.id, user]))
+  store.users = [
+    ...store.users.map((user) => incoming.get(user.id) ?? user),
+    ...users.filter((user) => user?.id && !store.users.some((item) => item.id === user.id)),
+  ]
+  emit()
+  return users
 }
 
 export function updateCurrentUser(updates) {
@@ -419,7 +444,7 @@ export function assignAvailableRider(id) {
   hydrate()
   const delivery = store.deliveries.find((d) => d.id === id)
   if (!delivery || delivery.status !== 'pending' || delivery.riderId) return delivery ?? null
-  const rider = store.users.find((user) => user.role === 'rider' && user.id !== delivery.customerId)
+  const rider = store.users.find((user) => user.role === 'rider' && user.isAvailable !== false && user.id !== delivery.customerId)
   if (!rider) return null
 
   const matched = {
@@ -623,5 +648,32 @@ export function updateTicketStatus(ticketId, status) {
   store.supportTickets = (store.supportTickets ?? []).map((t) =>
     t.id === ticketId ? { ...t, status } : t,
   )
+  emit()
+}
+
+export function setDeliveries(deliveries) {
+  store.deliveries = Array.isArray(deliveries) ? deliveries : []
+  emit()
+}
+
+
+export function setUsers(users) {
+  store.users = Array.isArray(users) ? users : []
+  emit()
+}
+
+export function upsertUser(user) {
+  if (!user || !user.id) return
+  const idx = store.users.findIndex((u) => u.id === user.id)
+  if (idx >= 0) {
+    store.users = store.users.map((u) => (u.id === user.id ? { ...u, ...user } : u))
+  } else {
+    store.users = [...store.users, user]
+  }
+  emit()
+}
+
+export function setSession(session) {
+  store.session = session
   emit()
 }

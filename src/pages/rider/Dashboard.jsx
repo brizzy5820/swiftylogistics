@@ -1,12 +1,14 @@
-import { useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
-import { Briefcase, Star, Trophy, AlertCircle, ChevronRight, GripHorizontal, X } from 'lucide-react'
+import { Briefcase, Star, Trophy, AlertCircle, ChevronRight, GripHorizontal, X, LoaderCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell'
 import { TripCard } from '@/components/trip-card'
 import { useRequireAuth } from '@/lib/use-require-auth'
 import { useStore, updateDeliveryStatus } from '@/lib/mock-store'
 import { RiderMap } from '@/components/rider-map'
+import { updateRiderDeliveryStatus } from '@/services/api'
+import { getDeliveries } from '@/services/api'
 
 const MAP_COLLAPSED = 36
 const MAP_DEFAULT = 260
@@ -175,6 +177,7 @@ export default function RiderDashboard() {
   const [mapHeight, setMapHeight] = useState(MAP_COLLAPSED)
   const [showMap, setShowMap] = useState(false)
   const [paymentDismissed, setPaymentDismissed] = useState(false)
+  const [loading, setLoading] = useState(true)
   
   // Desktop resizable sidebar
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT)
@@ -190,20 +193,32 @@ export default function RiderDashboard() {
   )
   const todayEarnings = completed.reduce((a, d) => a + d.price, 0)
 
-  if (!user) return null
-
-  const firstName = user.name.split(' ')[0]
+  const firstName = user?.name?.split(' ')[0] || ''
   const paymentIncomplete =
-    !user.vehicleType || !user.plateNumber || !user.licenseNumber || !user.nin || !user.bankName || !user.accountNumber
+    !user?.vehicleType || !user?.plateNumber || !user?.licenseNumber || !user?.nin || !user?.bankName || !user?.accountNumber
   const showPaymentBanner = paymentIncomplete && !paymentDismissed
   const mapJobs = [...incoming, ...myJobs]
 
+  useEffect(() => {
+    if (!user) return undefined
+    let cancelled = false
+    setLoading(true)
+    getDeliveries().finally(() => {
+      if (!cancelled) setLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [user?.id])
+
   function accept(id) {
-    updateDeliveryStatus(id, 'accepted', user.id, user.name)
+    updateRiderDeliveryStatus(id, 'accepted').catch(() => {
+      updateDeliveryStatus(id, 'accepted', user.id, user.name)
+    })
   }
 
   function reject(id) {
-    updateDeliveryStatus(id, 'cancelled')
+    updateRiderDeliveryStatus(id, 'cancelled').catch(() => {
+      updateDeliveryStatus(id, 'cancelled')
+    })
   }
 
   // Mobile: toggle map visibility
@@ -234,8 +249,16 @@ export default function RiderDashboard() {
     document.documentElement.style.userSelect = ''
   }, [])
 
+  if (!user) return null
+
   return (
     <AppShell>
+      {loading && (
+        <div className="mx-4 mt-6 flex items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-500 sm:mx-6 lg:mx-8">
+          <LoaderCircle className="h-5 w-5 animate-spin" />
+          Loading your jobs...
+        </div>
+      )}
       {/* Incomplete payment details modal — surfaces on first dashboard visit
           after sign-up/login when the rider hasn't filled in vehicle/verification. */}
       {paymentIncomplete && !paymentDismissed && (

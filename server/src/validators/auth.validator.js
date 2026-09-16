@@ -25,6 +25,10 @@ const registerSchema = z
       .min(7, "Invalid phone number")
       .max(20, "Phone number is too long")
       .optional(),
+
+    role: z
+      .enum(["customer", "rider"])
+      .default("customer"),
   })
   .strict();
 
@@ -40,6 +44,10 @@ const loginSchema = z
       .string()
       .min(1, "Password is required")
       .max(128, "Password is too long"),
+      
+        role: z
+      .enum(["customer", "rider"])
+      .default("customer"),
   })
   .strict();
 

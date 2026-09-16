@@ -26,7 +26,8 @@ import { AppShell } from '@/components/app-shell'
 import { BottomSheet } from '@/components/bottom-sheet'
 import { PageHeader } from '@/components/page-header'
 import { useRequireAuth } from '@/lib/use-require-auth'
-import { signOut, updateCurrentUser, useStore, VEHICLE_TYPES } from '@/lib/mock-store'
+import { useStore, VEHICLE_TYPES } from '@/lib/mock-store'
+import { updateMe, logout as apiLogout } from '@/services/api'
 import { readImageAsDataUrl } from '@/lib/image'
 
 const SECTIONS = [
@@ -56,7 +57,7 @@ export default function RiderAccount() {
   if (!accountUser) return null
 
   const handleLogout = () => {
-    signOut()
+    apiLogout()
     navigate('/auth')
   }
 
@@ -279,7 +280,7 @@ function ProfilePanel({ user, onAvatarChange, onAvatarRemove, avatarError }) {
   const avatarInputRef = useRef(null)
 
   function saveProfile() {
-    updateCurrentUser({
+    updateMe({
       name: name.trim() || user.name,
       email: email.trim() || user.email,
       phone: phone.trim(),

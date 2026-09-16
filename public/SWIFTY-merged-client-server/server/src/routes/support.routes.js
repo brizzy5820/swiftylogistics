@@ -1,0 +1,16 @@
+import express from "express";
+import { create, mine, all, reply, status } from "../controllers/support.controller.js";
+import { protect } from "../middleware/authMIddleware.js";
+import authorize from "../middleware/authorize.middleware.js";
+import validate from "../middleware/validate.js";
+import asyncHandler from "../utils/asyncHandler.js";
+import { createSupportTicketSchema, replySupportTicketSchema, updateSupportTicketSchema } from "../validators/support.validator.js";
+const router = express.Router();
+router.use(protect);
+router.post("/", validate(createSupportTicketSchema), asyncHandler(create));
+router.get("/", asyncHandler(mine));
+router.patch("/:id/reply", validate(replySupportTicketSchema), asyncHandler(reply));
+router.use(authorize("admin"));
+router.get("/admin/all", asyncHandler(all));
+router.patch("/:id/status", validate(updateSupportTicketSchema), asyncHandler(status));
+export default router;

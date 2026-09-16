@@ -17,7 +17,14 @@ import {
   CreditCard,
   CheckCircle2,
 } from 'lucide-react'
-import { signIn, getCurrentUser, signUp, updateCurrentUser, emailExists, VEHICLE_TYPES, forgotPassword } from '@/lib/mock-store'
+import {
+  login,
+  register,
+  getMe,
+
+  updateRiderProfile,
+} from '../services/api'
+import { forgotPassword } from '../lib/mock-store'
 
 // A single labeled input row. The border goes emerald on focus via
 // focus-within, so it works whether the child is an <input> or <select>.
@@ -62,15 +69,29 @@ export default function Auth() {
   const [bankName, setBankName] = useState('')
   const [accountNumber, setAccountNumber] = useState('')
 
-  useEffect(() => {
-    if (state?.role) return // explicit CTA intent (e.g. "I'm a rider") wins over an existing session
-    const user = getCurrentUser()
-    if (user) {
-      const dest = user.role === 'admin' ? '/admin' : user.role === 'rider' ? '/rider' : '/customer'
-      navigate(dest, { replace: true })
-    }
-  }, [navigate, state])
+useEffect(() => {
+  if (state?.role) return
 
+  const checkSession = async () => {
+    try {
+      const result = await getMe()
+      const user = result
+
+      const dest =
+        user.role === 'admin'
+          ? '/admin'
+          : user.role === 'rider'
+            ? '/rider'
+            : '/customer'
+
+      navigate(dest, { replace: true })
+    } catch {
+      // No valid session — stay on auth page.
+    }
+  }
+
+  checkSession()
+}, [navigate, state])
   function switchTab(t) {
     setTab(t)
     setSignupStep(1)
@@ -78,56 +99,108 @@ export default function Auth() {
     setShowPassword(false)
   }
 
-  function handleLogin(e) {
-    e.preventDefault()
-    setError('')
-    const user = signIn(loginEmail, loginPassword)
-    if (!user) {
-      setError('Invalid email or password. Please try again.')
-      return
-    }
-    // Always redirect by the user's actual stored role — not the CTA role.
-    // Return to the page they were sent from (carrying any prefill intent).
-    const fallback = user.role === 'admin' ? '/admin' : user.role === 'rider' ? '/rider' : '/customer'
-    navigate(state?.from || fallback, { replace: true, state: state?.intent ?? null })
+async function handleLogin(e) {
+  e.preventDefault()
+  setError('')
+
+  try {
+    const result = await login({
+      email: loginEmail,
+      password: loginPassword,
+      role
+    })
+
+    const user = result.user || result
+
+    const fallback =
+      user.role === 'admin'
+        ? '/admin'
+        : user.role === 'rider'
+          ? '/rider'
+          : '/customer'
+
+    navigate(state?.from || fallback, {
+      replace: true,
+      state: state?.intent ?? null,
+    })
+  } catch (error) {
+    setError(
+      error.message || 'Invalid email or password. Please try again.'
+    )
+  }
+}
+
+async function handleGeneralSubmit(e) {
+  e.preventDefault()
+  setError('')
+
+  if (
+    !name.trim() ||
+    !signupEmail.trim() ||
+    !signupPassword.trim() ||
+    (role === 'rider' && !phone.trim())
+  ) {
+    setError('Please fill in all required fields.')
+    return
   }
 
-  function handleGeneralSubmit(e) {
-    e.preventDefault()
-    setError('')
-    if (!name.trim() || !signupEmail.trim() || !signupPassword.trim() || (role === 'rider' && !phone.trim())) {
-      setError('Please fill in all required fields.')
-      return
-    }
+  try {
+    const result = await register({
+      name: name.trim(),
+      email: signupEmail.trim(),
+      password: signupPassword,
+      phone: phone.trim() || undefined,
+      role,
+    })
 
-    if (emailExists(signupEmail.trim())) {
-      setError('An account with that email already exists. Please log in instead.')
-      return
-    }
+    const user = result.user || result
 
-    const user = signUp(name.trim(), signupEmail.trim(), role, { phone: phone.trim(), password: signupPassword.trim() })
     if (user.role === 'rider') {
       setSignupStep(2)
       return
     }
-    navigate(state?.from || '/customer', { replace: true, state: state?.intent ?? null })
-  }
 
-  function handlePaymentSubmit(e) {
-    e.preventDefault()
-    const details = {}
-    if (vehicleType) details.vehicleType = vehicleType
-    if (vehicleColor.trim()) details.vehicleColor = vehicleColor.trim()
-    if (plateNumber.trim()) details.plateNumber = plateNumber.trim()
-    if (licenseNumber.trim()) details.licenseNumber = licenseNumber.trim()
-    if (nin.trim()) details.nin = nin.trim()
-    if (bankName.trim()) details.bankName = bankName.trim()
-    if (accountNumber.trim()) details.accountNumber = accountNumber.trim()
-    if (Object.keys(details).length > 0) {
-      updateCurrentUser(details)
-    }
-    navigate(state?.from || '/rider', { replace: true, state: state?.intent ?? null })
+    navigate(state?.from || '/customer', {
+      replace: true,
+      state: state?.intent ?? null,
+    })
+  } catch (error) {
+    setError(
+      error.message ||
+        'Unable to create your account. Please try again.'
+    )
   }
+}
+async function handlePaymentSubmit(e) {
+  e.preventDefault()
+  setError('')
+
+  const details = {}
+
+  if (vehicleType) details.vehicleType = vehicleType
+  if (vehicleColor.trim()) details.vehicleColor = vehicleColor.trim()
+  if (plateNumber.trim()) details.plateNumber = plateNumber.trim()
+  if (licenseNumber.trim()) details.licenseNumber = licenseNumber.trim()
+  if (nin.trim()) details.nin = nin.trim()
+  if (bankName.trim()) details.bankName = bankName.trim()
+  if (accountNumber.trim()) details.accountNumber = accountNumber.trim()
+
+  try {
+    if (Object.keys(details).length > 0) {
+      await updateRiderProfile(details)
+    }
+
+    navigate(state?.from || '/rider', {
+      replace: true,
+      state: state?.intent ?? null,
+    })
+  } catch (error) {
+    setError(
+      error.message ||
+        'Unable to save your rider details.'
+    )
+  }
+}
 
   function handleSkipPayment() {
     navigate(state?.from || '/rider', { replace: true, state: state?.intent ?? null })
@@ -443,26 +516,6 @@ export default function Auth() {
             By continuing, you agree to our Terms of Service and Privacy Policy
           </p>
 
-          {tab === 'login' && (
-            <div className="mt-5 hidden rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Demo accounts</p>
-              <div className="grid grid-cols-3 gap-2">
-                <button type="button" onClick={fillAdmin} className="rounded-xl border border-emerald-200 bg-white px-2 py-2 text-left text-[11px] font-semibold text-slate-700 transition hover:border-emerald-400 hover:bg-emerald-50">
-                  <span className="block text-[10px] font-bold uppercase text-emerald-700">Admin</span>
-                  admin@swifty.app
-                </button>
-                <button type="button" onClick={fillCustomer} className="rounded-xl border border-slate-200 bg-white px-2 py-2 text-left text-[11px] font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50">
-                  <span className="block text-[10px] font-bold uppercase text-slate-500">Customer</span>
-                  customer@swifty.app
-                </button>
-                <button type="button" onClick={fillRider} className="rounded-xl border border-slate-200 bg-white px-2 py-2 text-left text-[11px] font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50">
-                  <span className="block text-[10px] font-bold uppercase text-slate-500">Rider</span>
-                  rider@swifty.app
-                </button>
-              </div>
-              <p className="mt-2 text-[10px] text-slate-400">Seeded admin: admin@swifty.app / admin. Customer & rider accounts appear after signup.</p>
-            </div>
-          )}
         </div>
       </div>
 

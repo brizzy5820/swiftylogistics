@@ -40,7 +40,7 @@ export function TripCard({
 
   // Where the whole card goes when clicked — falls back to trackingId, then id,
   // so this still works for cards that don't pass an explicit actionTo.
-  const trackTo = actionTo ?? (role === 'rider' ? `/rider/job/${d.id}` : `/customer/track/${d.trackingId ?? d.id}`)
+  const trackTo = actionTo ?? (role === 'rider' ? `/rider/job/${d.trackingId}` : `/customer/track/${d.trackingId }`)
 
   function handleCardClick() {
     if (disableNavigation) return
@@ -86,7 +86,7 @@ export function TripCard({
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-bold text-slate-900">{d.id}</p>
+        <p className="text-sm font-bold text-slate-900">{d.trackingId}</p>
         <Badge variant={STATUS_VARIANT[d.status] ?? 'muted'}>{STATUS_LABEL[d.status] ?? d.status}</Badge>
       </div>
 
