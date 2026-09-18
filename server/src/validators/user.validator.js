@@ -2,6 +2,8 @@ import { z } from "zod";
 
 const updateUserSchema = z
   .object({
+    avatarUrl: z.string().url().max(500).optional(),
+
     name: z
       .string()
       .trim()

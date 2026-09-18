@@ -82,6 +82,12 @@ const deliverySchema = new mongoose.Schema(
       default: null,
     },
 
+    paymentMethod: {
+      type: String,
+      trim: true,
+      default: "cash",
+    },
+
     price: {
       type: Number,
       required: true,
@@ -143,6 +149,28 @@ isScheduled: {
   type: Boolean,
   default: false,
 },
+
+    // Set true once the customer has confirmed the assigned rider/ride and is
+    // on the live track page. A rider cannot move a ride from "picked_up" to
+    // "in_transit" (i.e. hit "Start trip") until this is true.
+    customerConfirmed: {
+      type: Boolean,
+      default: false,
+    },
+
+    // Lightweight in-order chat between the customer and the assigned rider,
+    // available once a rider has been assigned.
+    messages: {
+      type: [
+        {
+          sender: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+          senderRole: { type: String, enum: ["customer", "rider"], required: true },
+          text: { type: String, trim: true, maxlength: 1000, required: true },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
   },
   {
     timestamps: true,

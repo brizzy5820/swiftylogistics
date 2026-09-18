@@ -1,70 +1,93 @@
-import { motion, useScroll, useTransform } from 'framer-motion'
-import { ArrowRight, CarFront, CheckCircle2, Clock3, MapPin, Menu, Navigation,  PackageCheck, Search, ShieldCheck, Smartphone, X } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
-import { useEffect, useRef, useState } from 'react'
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../components/ui/sheet'
-import { ServiceGrid } from '../components/marketing/ServiceGrid'
-import { Footer } from '../components/marketing/Footer'
-import { ADDRESS_SUGGESTIONS, fetchLagosSuggestions, reverseGeocode, resolveAddressCoords } from '../lib/address-suggestions'
+import { motion, useScroll, useTransform } from "framer-motion";
+import {
+  ArrowRight,
+  CarFront,
+  CheckCircle2,
+  Clock3,
+  MapPin,
+  Menu,
+  Navigation,
+  PackageCheck,
+  Search,
+  ShieldCheck,
+  Smartphone,
+  X,
+} from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "../components/ui/sheet";
+import { ServiceGrid } from "../components/marketing/ServiceGrid";
+import { Footer } from "../components/marketing/Footer";
+import {
+  ADDRESS_SUGGESTIONS,
+  fetchLagosSuggestions,
+  reverseGeocode,
+  resolveAddressCoords,
+} from "../lib/address-suggestions";
 
 // variant: 'pickup' | 'dropoff' — circle vs square marker, and the
 // "use my location" arrow only shows on pickup. Green border on focus.
 function LocationField({ variant, value, onChange, onCoords, placeholder }) {
-  const isPickup = variant === 'pickup'
-  const [show, setShow] = useState(false)
-  const [items, setItems] = useState(ADDRESS_SUGGESTIONS)
-  const [focused, setFocused] = useState(false)
-  const [geoLabel, setGeoLabel] = useState('Detecting location…')
-  const [geoReady, setGeoReady] = useState(false)
-  const geoCoordsRef = useRef(null)
-  const timer = useRef(null)
+  const isPickup = variant === "pickup";
+  const [show, setShow] = useState(false);
+  const [items, setItems] = useState(ADDRESS_SUGGESTIONS);
+  const [focused, setFocused] = useState(false);
+  const [geoLabel, setGeoLabel] = useState("Detecting location…");
+  const [geoReady, setGeoReady] = useState(false);
+  const geoCoordsRef = useRef(null);
+  const timer = useRef(null);
 
   useEffect(() => {
-    if (!isPickup) return
-    if (!navigator.geolocation) { setGeoLabel('Location unavailable'); return }
+    if (!isPickup) return;
+    if (!navigator.geolocation) {
+      setGeoLabel("Location unavailable");
+      return;
+    }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude }
-        geoCoordsRef.current = coords
-        onCoords?.(coords)
-        setGeoLabel(`My location`)
-        setGeoReady(true)
+        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        geoCoordsRef.current = coords;
+        onCoords?.(coords);
+        setGeoLabel(`My location`);
+        setGeoReady(true);
         reverseGeocode(coords).then((label) => {
-          if (label) setGeoLabel(label)
-        })
+          if (label) setGeoLabel(label);
+        });
       },
-      () => setGeoLabel('Location unavailable'),
-    )
-  }, [isPickup, onCoords])
+      () => setGeoLabel("Location unavailable"),
+    );
+  }, [isPickup, onCoords]);
 
   useEffect(() => {
-    if (timer.current) clearTimeout(timer.current)
-    const controller = new AbortController()
+    if (timer.current) clearTimeout(timer.current);
+    const controller = new AbortController();
     timer.current = setTimeout(() => {
       fetchLagosSuggestions(value, controller.signal).then((nextItems) => {
-        if (!controller.signal.aborted) setItems(nextItems)
-      })
-    }, 300)
+        if (!controller.signal.aborted) setItems(nextItems);
+      });
+    }, 300);
     return () => {
-      controller.abort()
-      if (timer.current) clearTimeout(timer.current)
-    }
-  }, [value])
+      controller.abort();
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [value]);
 
-  function handleUseMyLocation() {
-    if (!geoReady) return
-    onCoords?.(geoCoordsRef.current)
-    onChange(geoLabel)
-    setShow(false)
+  function useMyLocation() {
+    if (!geoReady) return;
+    onCoords?.(geoCoordsRef.current);
+    onChange(geoLabel);
+    setShow(false);
   }
 
   return (
     <div className="relative">
       <div
         className={[
-          'flex items-center gap-3 rounded-xl border bg-slate-100 px-4 py-3.5 transition-colors duration-150',
-          focused ? 'border-emerald-400 shadow-[0_0_0_3px_rgba(16,185,129,0.10)]' : 'border-transparent',
-        ].join(' ')}
+          "flex items-center gap-3 rounded-xl border bg-slate-100 px-4 py-3.5 transition-colors duration-150",
+          focused
+            ? "border-emerald-400 shadow-[0_0_0_3px_rgba(16,185,129,0.10)]"
+            : "border-transparent",
+        ].join(" ")}
       >
         <div className="flex h-5 w-5 shrink-0 items-center justify-center">
           {isPickup ? (
@@ -77,8 +100,14 @@ function LocationField({ variant, value, onChange, onCoords, placeholder }) {
         <input
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          onFocus={() => { setFocused(true); setShow(true) }}
-          onBlur={() => { setFocused(false); setTimeout(() => setShow(false), 150) }}
+          onFocus={() => {
+            setFocused(true);
+            setShow(true);
+          }}
+          onBlur={() => {
+            setFocused(false);
+            setTimeout(() => setShow(false), 150);
+          }}
           placeholder={placeholder}
           className="w-full bg-transparent text-sm font-semibold text-slate-800 outline-none placeholder:text-slate-400"
         />
@@ -86,16 +115,22 @@ function LocationField({ variant, value, onChange, onCoords, placeholder }) {
         {value ? (
           <button
             type="button"
-            onMouseDown={(e) => { e.preventDefault(); onChange('') }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onChange("");
+            }}
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-200"
-            aria-label={`Clear ${isPickup ? 'pickup' : 'dropoff'}`}
+            aria-label={`Clear ${isPickup ? "pickup" : "dropoff"}`}
           >
             <X className="h-4 w-4" />
           </button>
         ) : isPickup ? (
           <button
             type="button"
-            onMouseDown={(e) => { e.preventDefault(); handleUseMyLocation() }}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              useMyLocation();
+            }}
             className="flex h-6 w-6 shrink-0 items-center justify-center text-slate-900"
             aria-label="Use current location"
           >
@@ -109,7 +144,10 @@ function LocationField({ variant, value, onChange, onCoords, placeholder }) {
           {geoReady && isPickup && (
             <button
               type="button"
-              onMouseDown={(e) => { e.preventDefault(); handleUseMyLocation() }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                useMyLocation();
+              }}
               className="flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left text-sm font-medium text-emerald-700 transition hover:bg-emerald-50"
             >
               <Navigation className="h-4 w-4" />
@@ -123,7 +161,12 @@ function LocationField({ variant, value, onChange, onCoords, placeholder }) {
               <button
                 key={it.label}
                 type="button"
-                onMouseDown={(e) => { e.preventDefault(); onChange(it.label); onCoords?.(it.coords); setShow(false) }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onChange(it.label);
+                  onCoords?.(it.coords);
+                  setShow(false);
+                }}
                 className="block w-full truncate px-4 py-3 text-left text-sm text-slate-700 transition hover:bg-slate-50"
               >
                 {it.label}
@@ -133,35 +176,35 @@ function LocationField({ variant, value, onChange, onCoords, placeholder }) {
         </div>
       )}
     </div>
-  )
+  );
 }
 
 export default function Index() {
-  const navigate = useNavigate()
-  const { scrollY } = useScroll()
-  const heroY = useTransform(scrollY, [0, 700], ['0%', '22%'])
-  const [scrolled, setScrolled] = useState(false)
-  useEffect(() => scrollY.on('change', (value) => setScrolled(value > 40)), [scrollY])
+  const navigate = useNavigate();
+  const { scrollY } = useScroll();
+  const heroY = useTransform(scrollY, [0, 700], ["0%", "22%"]);
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => scrollY.on("change", (value) => setScrolled(value > 40)), [scrollY]);
 
-  const [mode, setMode] = useState('ride')
-  const [pickup, setPickup] = useState('')
-  const [dropoff, setDropoff] = useState('')
-  const [pickupCoords, setPickupCoords] = useState(null)
-  const [dropoffCoords, setDropoffCoords] = useState(null)
-  const [trackCode, setTrackCode] = useState('')
+  const [mode, setMode] = useState("ride");
+  const [pickup, setPickup] = useState("");
+  const [dropoff, setDropoff] = useState("");
+  const [pickupCoords, setPickupCoords] = useState(null);
+  const [dropoffCoords, setDropoffCoords] = useState(null);
+  const [trackCode, setTrackCode] = useState("");
 
   function handleRide(e) {
-    e.preventDefault()
-    const pc = pickupCoords ?? resolveAddressCoords(pickup, null)
-    const dc = dropoffCoords ?? resolveAddressCoords(dropoff, null)
-    navigate('/customer/ride', { state: { pickup, dropoff, pickupCoords: pc, dropoffCoords: dc } })
+    e.preventDefault();
+    const pc = pickupCoords ?? resolveAddressCoords(pickup, null);
+    const dc = dropoffCoords ?? resolveAddressCoords(dropoff, null);
+    navigate("/customer/ride", { state: { pickup, dropoff, pickupCoords: pc, dropoffCoords: dc } });
   }
 
   function handleTrack(e) {
-    e.preventDefault()
-    const code = trackCode.trim()
-    if (!code) return
-    navigate(`/customer/track/${encodeURIComponent(code)}`)
+    e.preventDefault();
+    const code = trackCode.trim();
+    if (!code) return;
+    navigate(`/customer/track/${encodeURIComponent(code)}`);
   }
 
   return (
@@ -457,28 +500,87 @@ export default function Index() {
 
 function MapBackdrop() {
   return (
-   <img src='https://plus.unsplash.com/premium_photo-1681488098851-e3913f3b1908?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8N3x8bWFwJTIwYmFja2dyb3VuZHxlbnwwfHwwfHx8MA%3D%3D' className="h-full w-full" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden>
-   </img>
-  )
+    <img
+      src="https://plus.unsplash.com/premium_photo-1681488098851-e3913f3b1908?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8N3x8bWFwJTIwYmFja2dyb3VuZHxlbnwwfHwwfHx8MA%3D%3D"
+      className="h-full w-full hidden"
+      viewBox="0 0 1440 900"
+      preserveAspectRatio="xMidYMid slice"
+      aria-hidden
+    ></img>
+  );
 }
 
 function HeroVisual() {
   return (
     <div className="relative mt-0 hidden lg:mt-0 lg:block">
-      <motion.div initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: .2 }} className="relative  w-full overflow-hidden rounded-[2.4rem] bg-white  shadow-2xl shadow-emerald-900/10 ring-1 ring-slate-200/80">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 0.2 }}
+        className="relative  w-full overflow-hidden rounded-[2.4rem] bg-white  shadow-2xl shadow-emerald-900/10 ring-1 ring-slate-200/80"
+      >
         <div className="relative h-100  overflow-hidden rounded-[1.9rem] bg-emerald-100">
-          <img src="/blush.jpg" alt="A Swifty rider ready to pick you up" className="h-full w-full object-cover" />
+          <img
+            src="/blush.jpg"
+            alt="A Swifty rider ready to pick you up"
+            className="h-full w-full object-cover"
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-emerald-900/40 via-transparent to-transparent" />
         </div>
-
       </motion.div>
-      <div className="absolute -left-6 hidden top-10 flex items-center gap-2 rounded-2xl bg-white/90 px-4 py-3 shadow-xl ring-1 ring-slate-200 backdrop-blur"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50"><MapPin className="h-4 w-4 text-emerald-600" /></span><div><p className="text-xs font-bold text-slate-900">Live route</p><p className="text-[11px] text-slate-500">Updated in real time</p></div></div>
-      <div className="absolute -right-4 hidden bottom-16 flex items-center gap-2 rounded-2xl bg-white/90 px-4 py-3 shadow-xl ring-1 ring-slate-200 backdrop-blur"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-rose-50"><CheckCircle2 className="h-4 w-4 text-rose-500" /></span><div><p className="text-xs font-bold text-slate-900">On time</p><p className="text-[11px] text-slate-500">4.9 ★ rider rating</p></div></div>
+      <div className="absolute -left-6 hidden top-10 flex items-center gap-2 rounded-2xl bg-white/90 px-4 py-3 shadow-xl ring-1 ring-slate-200 backdrop-blur">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50">
+          <MapPin className="h-4 w-4 text-emerald-600" />
+        </span>
+        <div>
+          <p className="text-xs font-bold text-slate-900">Live route</p>
+          <p className="text-[11px] text-slate-500">Updated in real time</p>
+        </div>
+      </div>
+      <div className="absolute -right-4 hidden bottom-16 flex items-center gap-2 rounded-2xl bg-white/90 px-4 py-3 shadow-xl ring-1 ring-slate-200 backdrop-blur">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-rose-50">
+          <CheckCircle2 className="h-4 w-4 text-rose-500" />
+        </span>
+        <div>
+          <p className="text-xs font-bold text-slate-900">On time</p>
+          <p className="text-[11px] text-slate-500">4.9 ★ rider rating</p>
+        </div>
+      </div>
     </div>
-  )
+  );
 }
 
-function Metric({ value, label }) { return <div className="text-center"><p className="font-display text-3xl font-black tracking-tight sm:text-4xl">{value}</p><p className="mt-1 text-xs font-semibold uppercase tracking-wider text-slate-400">{label}</p></div> }
-function Step({ n, icon: Icon, title, text }) { return <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200"><span className="text-xs font-black text-emerald-600">{n}</span><Icon className="mt-7 h-6 w-6 text-slate-900" /><h3 className="mt-5 font-display text-lg font-bold">{title}</h3><p className="mt-2 text-sm leading-6 text-slate-500">{text}</p></div> }
-function Safety({ icon: Icon, title, text }) { return <div className="rounded-3xl bg-white p-7 shadow-sm ring-1 ring-emerald-100"><Icon className="h-7 w-7 text-emerald-600" /><h3 className="mt-6 font-display text-xl font-bold">{title}</h3><p className="mt-3 text-sm leading-6 text-slate-500">{text}</p></div> }
-function MapPinIcon(props) { return <span {...props} className={props.className}>⌖</span> }
+function Metric({ value, label }) {
+  return (
+    <div className="text-center">
+      <p className="font-display text-3xl font-black tracking-tight sm:text-4xl">{value}</p>
+      <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-slate-400">{label}</p>
+    </div>
+  );
+}
+function Step({ n, icon: Icon, title, text }) {
+  return (
+    <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+      <span className="text-xs font-black text-emerald-600">{n}</span>
+      <Icon className="mt-7 h-6 w-6 text-slate-900" />
+      <h3 className="mt-5 font-display text-lg font-bold">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-slate-500">{text}</p>
+    </div>
+  );
+}
+function Safety({ icon: Icon, title, text }) {
+  return (
+    <div className="rounded-3xl bg-white p-7 shadow-sm ring-1 ring-emerald-100">
+      <Icon className="h-7 w-7 text-emerald-600" />
+      <h3 className="mt-6 font-display text-xl font-bold">{title}</h3>
+      <p className="mt-3 text-sm leading-6 text-slate-500">{text}</p>
+    </div>
+  );
+}
+function MapPinIcon(props) {
+  return (
+    <span {...props} className={props.className}>
+      ⌖
+    </span>
+  );
+}

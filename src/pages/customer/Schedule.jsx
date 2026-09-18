@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Calendar, Clock, MapPin, PackageCheck, ArrowLeft, X } from 'lucide-react'
 import { useRequireAuth } from '../../lib/use-require-auth'
-import { scheduleDelivery, cancelScheduled, useStore } from '../../lib/mock-store'
+import { scheduleDelivery, cancelScheduled, useStore } from '../../lib/api-store'
 import { AppShell } from '../../components/app-shell'
 import { DeliveryMap } from '../../components/delivery-map'
 import { resolveAddressCoords, reverseGeocode } from '../../lib/address-suggestions'
 
-const PACKAGE_TYPES = ['Express', 'Standard', 'Cargo']
+const PACKAGE_TYPES = ['Express', 'Cargo', 'Electric']
 const TIME_SLOTS = [
   { id: 'morning', label: 'Morning', time: '08:00 – 11:00' },
   { id: 'midday', label: 'Midday', time: '11:00 – 14:00' },
@@ -65,7 +65,7 @@ export default function Schedule() {
     return () => clearTimeout(t)
   }, [dropoff])
 
-  function schedule() {
+  async function schedule() {
     setError('')
     if (!pickup.trim() || !dropoff.trim()) {
       setError('Please add both pickup and dropoff addresses.')
@@ -80,17 +80,20 @@ export default function Schedule() {
       setError('We could not locate one of the addresses. Try a clearer name like “Lekki Phase 1”.')
       return
     }
-    const created = scheduleDelivery({
-      customerId: user.id,
-      customerName: user.name,
-      pickup: { address: pickup, coords: pickupCoords },
-      dropoff: { address: dropoff, coords: dropoffCoords },
-      packageType: pkg,
-      weightKg: weight,
-      note,
-      scheduledFor,
-    })
-    setSubmitted(created)
+    try {
+      const created = await scheduleDelivery({
+        pickup: { address: pickup, coords: pickupCoords },
+        dropoff: { address: dropoff, coords: dropoffCoords },
+        packageType: pkg,
+        weightKg: weight,
+        note,
+        scheduledFor,
+      })
+      setSubmitted(created)
+    } catch (err) {
+      setError(err.message || 'Unable to schedule delivery.')
+      return
+    }
     setPickup('')
     setDropoff('')
     setPickupCoords(null)
@@ -99,7 +102,7 @@ export default function Schedule() {
   }
 
   function remove(id) {
-    cancelScheduled(id)
+    void cancelScheduled(id)
   }
 
   return (

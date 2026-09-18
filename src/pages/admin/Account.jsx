@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LogOut, Mail, User as UserIcon, Lock, CheckCircle2, Save, Shield, RotateCcw } from 'lucide-react'
 import { useRequireAdmin } from '../../lib/use-require-admin'
-import { useStore, signOut, updateCurrentUser, resetDemo } from '../../lib/mock-store'
+import { useStore, signOut, updateCurrentUser, adminSetPassword } from '../../lib/api-store'
 import { AdminShell } from '../../components/admin/AdminShell'
 import { DetailRow } from '../../components/admin/DataTable'
 
@@ -15,10 +15,15 @@ export default function AdminAccount() {
   const [newPassword, setNewPassword] = useState('')
   const [saved, setSaved] = useState('')
 
-  function save() {
-    updateCurrentUser({ name: name.trim() || account.name, ...(newPassword ? { password: newPassword } : {}) })
-    setNewPassword('')
-    setSaved('Account updated.')
+  async function save() {
+    try {
+      await updateCurrentUser({ name: name.trim() || account.name })
+      if (newPassword) await adminSetPassword(account.id || account._id, newPassword)
+      setNewPassword('')
+      setSaved('Account updated.')
+    } catch (error) {
+      setSaved(error.message || 'Unable to update account.')
+    }
     setTimeout(() => setSaved(''), 2500)
   }
 
@@ -27,12 +32,6 @@ export default function AdminAccount() {
     navigate('/auth')
   }
 
-  function resetAll() {
-    if (!confirm('This will clear all customers, riders, and deliveries from the demo. Continue?')) return
-    resetDemo()
-    setSaved('Demo data reset.')
-    setTimeout(() => setSaved(''), 2500)
-  }
 
   return (
     <AdminShell>
@@ -106,17 +105,6 @@ export default function AdminAccount() {
                 <DetailRow label="Role" value="Administrator" />
                 <DetailRow label="Department" value={account?.department || 'Operations'} />
               </div>
-            </div>
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-              <p className="flex items-center gap-2 text-sm font-bold text-amber-800">
-                <RotateCcw className="h-4 w-4" /> Demo controls
-              </p>
-              <p className="mt-1.5 text-xs leading-5 text-amber-700">
-                Wipe all customer, rider, and delivery data and start over. Useful for a fresh demo.
-              </p>
-              <button onClick={resetAll} className="mt-3 inline-flex items-center gap-2 rounded-full border border-amber-300 bg-white px-4 py-2 text-xs font-bold text-amber-800 transition hover:bg-amber-100">
-                <RotateCcw className="h-3.5 w-3.5" /> Reset demo data
-              </button>
             </div>
           </div>
         </div>

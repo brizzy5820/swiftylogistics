@@ -16,6 +16,8 @@ import {
   updateUserSchema,
   updateUserRoleSchema,
   updateUserStatusSchema,
+  createUserSchema,
+  setUserPasswordSchema,
   assignRiderSchema,
   updateOrderStatusSchema,
 } from "../validators/admin.validator.js";
@@ -57,6 +59,12 @@ router.get(
   )
 );
 
+router.post(
+  "/users",
+  validate(createUserSchema),
+  asyncHandler(adminController.createUser)
+);
+
 router.get(
   "/users/:id",
   asyncHandler(
@@ -86,6 +94,17 @@ router.patch(
   asyncHandler(
     adminController.updateUserStatus
   )
+);
+
+router.patch(
+  "/users/:id/password",
+  validate(setUserPasswordSchema),
+  asyncHandler(adminController.setUserPassword)
+);
+
+router.delete(
+  "/users/:id",
+  asyncHandler(adminController.deleteUser)
 );
 
 /*
@@ -163,6 +182,16 @@ router.patch(
   asyncHandler(
     adminController.updateOrderStatus
   )
+);
+
+router.patch(
+  "/orders/:orderId/reset",
+  asyncHandler(adminController.resetOrder)
+);
+
+router.delete(
+  "/orders/:orderId",
+  asyncHandler(adminController.deleteOrder)
 );
 
 router.patch(

@@ -300,6 +300,31 @@ const cancelOrder = async (
   });
 };
 
+const createUser = async (req, res) => {
+  const user = await adminService.createUser(req.body);
+  return res.status(201).json({ success: true, message: "User created successfully", user });
+};
+
+const deleteUser = async (req, res) => {
+  await adminService.deleteUser(req.params.id, req.user._id);
+  return res.status(200).json({ success: true, message: "User deleted successfully" });
+};
+
+const setUserPassword = async (req, res) => {
+  await adminService.setUserPassword(req.params.id, req.body.password);
+  return res.status(200).json({ success: true, message: "Password updated successfully" });
+};
+
+const deleteOrder = async (req, res) => {
+  await adminService.deleteOrder(req.params.orderId);
+  return res.status(200).json({ success: true, message: "Order deleted successfully" });
+};
+
+const resetOrder = async (req, res) => {
+  const order = await adminService.resetOrder(req.params.orderId);
+  return res.status(200).json({ success: true, message: "Order reset to pending", order });
+};
+
 export default {
   getDashboard,
 
@@ -308,6 +333,9 @@ export default {
   updateUser,
   updateUserRole,
   updateUserStatus,
+  createUser,
+  deleteUser,
+  setUserPassword,
 
   getRiders,
   getRider,
@@ -321,4 +349,6 @@ export default {
   autoAssignRider,
   updateOrderStatus,
   cancelOrder,
+  deleteOrder,
+  resetOrder,
 };

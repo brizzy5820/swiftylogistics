@@ -1,5 +1,6 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
+import { ShimmerImage } from '@/components/shimmer-image'
 import {
   User,
   LogOut,
@@ -25,8 +26,7 @@ import { AppShell } from '@/components/app-shell'
 import { BottomSheet } from '@/components/bottom-sheet'
 import { PageHeader } from '@/components/page-header'
 import { useRequireAuth } from '@/lib/use-require-auth'
-import { signOut, useStore, STATUS_LABEL } from '@/lib/mock-store'
-import { updateMe, logout as apiLogout } from '@/services/api'
+import { signOut, updateCurrentUser, changePassword, useStore, STATUS_LABEL } from '@/lib/api-store'
 import { readImageAsDataUrl } from '@/lib/image'
 
 const SECTIONS = [
@@ -99,7 +99,7 @@ export default function Account() {
   const recentDeliveries = [...deliveries].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)).slice(0, 4)
 
   const handleLogout = () => {
-    apiLogout()
+    signOut()
     navigate('/auth')
   }
 
@@ -154,7 +154,7 @@ export default function Account() {
                 <div className="relative h-12 w-12 shrink-0">
                   <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-emerald-600 text-white">
                     {accountUser.avatarUrl ? (
-                      <img src={accountUser.avatarUrl} alt="" className="h-full w-full object-cover" />
+                      <ShimmerImage src={accountUser.avatarUrl} className="h-full w-full" imgClassName="h-full w-full object-cover" />
                     ) : (
                       <User className="h-6 w-6" />
                     )}
@@ -278,7 +278,12 @@ export default function Account() {
         description={activeModal === 'password' ? 'Set a new password for your account.' : 'Choose how you want alerts delivered.'}
         footer={
           <button
-            onClick={closeModal}
+            onClick={async () => {
+              if (activeModal === 'password') {
+                try { await changePassword(password); setPassword(''); setSavedNotice('Password updated successfully.'); closeModal() }
+                catch (error) { setSavedNotice(error.message || 'Unable to update password.') }
+              } else closeModal()
+            }}
             className="w-full rounded-full bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500"
           >
             {activeModal === 'password' ? 'Save password' : 'Confirm'}
@@ -313,7 +318,6 @@ export default function Account() {
 function ProfilePanel({ user, totalOrders, deliveredOrders, activeOrders, startEditing = false, onAvatarChange, onAvatarRemove, avatarError }) {
   const [editing, setEditing] = useState(startEditing)
   const [name, setName] = useState(user.name)
-  const [newPassword, setNewPassword] = useState('')
   const [notice, setNotice] = useState('')
   const avatarInputRef = useRef(null)
 
@@ -325,10 +329,10 @@ function ProfilePanel({ user, totalOrders, deliveredOrders, activeOrders, startE
   }, [startEditing])
 
   function saveProfile() {
-    updateMe({ name: name.trim() || user.name })
-    setNewPassword('')
+    // Email intentionally excluded — it's locked and not sent in the update.
+    updateCurrentUser({ name: name.trim() || user.name })
     setEditing(false)
-    setNotice(newPassword ? 'Profile updated. Password captured for this demo.' : 'Profile updated.')
+    setNotice('Profile updated.')
   }
 
   return (
@@ -337,7 +341,7 @@ function ProfilePanel({ user, totalOrders, deliveredOrders, activeOrders, startE
         <div className="relative shrink-0">
           <div className="flex h-28 w-24 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
             {user.avatarUrl ? (
-              <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+              <ShimmerImage src={user.avatarUrl} className="h-full w-full" imgClassName="h-full w-full object-cover" />
             ) : (
               <User className="h-10 w-10 text-slate-300" />
             )}
@@ -404,7 +408,6 @@ function ProfilePanel({ user, totalOrders, deliveredOrders, activeOrders, startE
           {/* Email is locked everywhere — shown as read-only even in editing mode,
               with a note pointing to support instead of an editable input. */}
           <LockedField label="Email" value={user.email} note="Contact support to change your email." />
-          <EditableField label="New password" type="password" value={newPassword} onChange={setNewPassword} placeholder="Enter new password" />
           <InfoItem label="Account type" value="Customer" />
         </div>
       ) : (

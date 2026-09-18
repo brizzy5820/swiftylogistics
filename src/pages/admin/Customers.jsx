@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Users, CarFront, PackageCheck, Trash2, Edit, KeyRound, Plus } from 'lucide-react'
 import { useRequireAdmin } from '../../lib/use-require-admin'
-import { useStore, updateUser, deleteUser, forgotPassword, createUser, adminSetPassword } from '../../lib/mock-store'
+import { useStore, updateUser, deleteUser, createUser, adminSetPassword } from '../../lib/api-store'
 import { AdminShell } from '../../components/admin/AdminShell'
 import { DataTable, AdminModal, DetailRow, CopyChip } from '../../components/admin/DataTable'
 
@@ -30,19 +30,19 @@ export default function AdminCustomers() {
     setAddError('')
     setAdding(true)
   }
-  function submitAdd() {
+  async function submitAdd() {
     setAddError('')
     if (!addForm.name.trim() || !addForm.email.trim() || !addForm.password.trim()) {
       setAddError('Name, email, and password are required.')
       return
     }
-    const created = createUser({ ...addForm, role: addRole })
-    if (!created) {
-      setAddError('An account with that email already exists.')
-      return
+    try {
+      const created = await createUser({ ...addForm, role: addRole })
+      setAdding(false)
+      setNotice(`Created ${created.name} (${addRole}).`)
+    } catch (error) {
+      setAddError(error.message || 'Unable to create user.')
     }
-    setAdding(false)
-    setNotice(`Created ${created.name} (${addRole}).`)
   }
 
   const columns = useMemo(() => [
@@ -103,38 +103,41 @@ export default function AdminCustomers() {
     setNotice('')
   }
 
-  function saveEdit() {
+  async function saveEdit() {
     if (!selected) return
-    updateUser(selected.id, { name: editName.trim() || selected.name, phone: editPhone.trim() })
+    try {
+      await updateUser(selected.id, { name: editName.trim() || selected.name, phone: editPhone.trim() })
+    } catch (error) { setNotice(error.message || 'Unable to update user.'); return }
     setNotice('Customer updated.')
     setEditing(false)
   }
 
   function resetPwd() {
     if (!selected) return
-    forgotPassword(selected.email)
-    setNotice(`Password reset to reset1234. ${selected.email} can log in now.`)
+    setShowPwd(true)
+    setNotice('Enter a new password to update this account.')
   }
 
-  function setPassword() {
+  async function setPassword() {
     if (!selected) return
     if (!newPwd.trim()) {
       setNotice('Enter a new password first.')
       return
     }
-    const updated = adminSetPassword(selected.id, newPwd.trim())
-    if (updated) {
-      setNotice(`Password updated for ${selected.email}. They can log in with the new password right away.`)
+    try {
+      await adminSetPassword(selected.id, newPwd.trim())
+      setNotice(`Password updated for ${selected.email}.`)
       setNewPwd('')
       setShowPwd(false)
+    } catch (error) {
+      setNotice(error.message || 'Unable to update password.')
     }
   }
 
-  function remove() {
+  async function remove() {
     if (!selected) return
     if (!confirm(`Delete ${selected.name}? Their bookings will also be removed.`)) return
-    deleteUser(selected.id)
-    close()
+    try { await deleteUser(selected.id); close() } catch (error) { setNotice(error.message || 'Unable to delete user.') }
   }
 
   const selectedDeliveries = selected

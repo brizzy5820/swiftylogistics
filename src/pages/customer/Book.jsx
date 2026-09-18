@@ -8,8 +8,8 @@ import {
 import { AppShell } from '@/components/app-shell'
 import { MobileRouteMap, RouteMapPanel } from '@/components/mobile-route-map'
 import { useRequireAuth } from '@/lib/use-require-auth'
-import { useStore } from '@/lib/mock-store'
-import { createAddress, createDelivery } from '../../services/api'
+import { createDelivery, useStore } from '@/lib/api-store'
+import { getErrorMessage } from '@/services/api'
 import { reverseGeocode } from '@/lib/address-suggestions'
 
 
@@ -404,6 +404,8 @@ export default function Book() {
   const [pkg, setPkg]     = useState('Express')
   const [weight, setWeight] = useState(5)
   const [note, setNote]   = useState('')
+  const [submitError, setSubmitError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   /* map UI state */
 
@@ -547,42 +549,24 @@ export default function Book() {
 
   async function handleSubmit(e) {
     e.preventDefault()
+    if (submitting) return
+    setSubmitError('')
+    setSubmitting(true)
     try {
-      const [pickup, dropoff] = await Promise.all([
-        createAddress({
-          label: 'Pickup',
-          addressLine: confirmedPickup,
-          city: 'Lagos',
-          state: 'Lagos',
-          coordinates: {
-            latitude: pickupCoords.lat,
-            longitude: pickupCoords.lng,
-          },
-        }),
-        createAddress({
-          label: 'Drop-off',
-          addressLine: confirmedDropoff,
-          city: 'Lagos',
-          state: 'Lagos',
-          coordinates: {
-            latitude: dropoffCoords.lat,
-            longitude: dropoffCoords.lng,
-          },
-        }),
-      ])
-
       const delivery = await createDelivery({
-        pickupAddress: pickup._id || pickup.id,
-        dropoffAddress: dropoff._id || dropoff.id,
+        pickup: { address: confirmedPickup, coords: pickupCoords },
+        dropoff: { address: confirmedDropoff, coords: dropoffCoords },
         packageType: pkg,
         weightKg: weight,
         note: note.trim(),
       })
-
       navigator.clipboard?.writeText(delivery.trackingId)
-      navigate('/customer/track/' + activeDelivery.trackingId)
+      navigate('/customer/track/' + delivery.id)
     } catch (error) {
-      window.alert(error.message || 'Unable to create delivery.')
+      console.error(error)
+      setSubmitError(getErrorMessage(error, 'Unable to create delivery. Please review the route and try again.'))
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -674,38 +658,12 @@ export default function Book() {
        
 
           {/* Page grid */}
-          <div className="grid gap-6 lg:mt-4 md:mt-4  lg:grid-cols-2">
+          <div className="grid gap-6 lg:mt-4 md:mt-4   lg:grid-cols-2">
             {/* ── Left: form column ── */}
             <div className="min-w-0 lg:mt-5 md:mt-5  space-y-4">
-              {/* Header card */}
-              {/* <div className="rounded-2xl border mt-5 border-slate-200 bg-white px-5 py-5 shadow-sm sm:px-7">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-primary">
-                      New delivery
-                    </p>
-                    <h1 className="mt-1.5 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-                      Book in 3 steps
-                    </h1>
-                    <p className="mt-1 text-sm text-slate-400">
-                      Set your route, choose a package type, then confirm.
-                    </p>
-                  </div>
-                  <div className="inline-flex shrink-0 items-center rounded-full bg-primary/8 px-3.5 py-1.5 text-xs font-bold text-primary">
-                    Step {step + 1} / 3
-                  </div>
-                </div>
-              </div> */}
+    
                  {/* Back button */}
           <div className='flex gap-3 items-center mt-5 mb-5'>
-            {/* <button
-            type="button"
-            onClick={handleBack}
-            aria-label="Go back"
-            className="inline-flex h-10 w-10 items-center justify-center  text-slate-600  transition hover:bg-slate-50 hover:text-slate-900"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button> */}
            <h1 className="mt-2 font-display md:px-6 lg:px-6 text-3xl font-black tracking-tight text-slate-950 sm:text-5xl">Place a Delivery</h1>
           </div>
 
@@ -920,6 +878,12 @@ export default function Book() {
                   )}
 
                   {/* ─── Navigation buttons ─── */}
+                  {submitError && (
+                    <p className="mt-5 whitespace-pre-line rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+                      {submitError}
+                    </p>
+                  )}
+
                   <div className="mt-6 flex flex-wrap items-center gap-3">
                     {step > 0 && (
                       <button
@@ -949,9 +913,10 @@ export default function Book() {
                     ) : (
                       <button
                         type="submit"
-                        className="flex items-center gap-2 rounded-xl bg-emerald-600 px-7 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 active:scale-95 transition-all"
+                        disabled={submitting}
+                        className="flex items-center gap-2 rounded-xl bg-emerald-600 px-7 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-emerald-500 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        Confirm booking
+                        {submitting ? 'Creating booking...' : 'Confirm booking'}
                         <CheckCircle2 className="h-4 w-4" />
                       </button>
                     )}
@@ -975,7 +940,7 @@ export default function Book() {
             </div>
 
             {/* ── Right: desktop map aside ── */}
-            <aside className="hidden lg:block">
+            <aside className="relative hidden lg:grid h-[50vh] sm:h-[60vh] lg:sticky lg:top-24  lg:h-[560px] ">
               <RouteMapPanel
                 pickup={activeDelivery ? activeDelivery.pickup.coords : pickupCoords}
                 dropoff={activeDelivery ? activeDelivery.dropoff.coords : dropoffCoords}

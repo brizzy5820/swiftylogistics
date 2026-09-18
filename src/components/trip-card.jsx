@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { Clock, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { STATUS_LABEL, useStore } from '@/lib/mock-store'
+import { STATUS_LABEL, useStore } from '@/lib/api-store'
 import { cn } from '@/lib/utils'
 
 const STATUS_VARIANT = {
@@ -40,7 +40,7 @@ export function TripCard({
 
   // Where the whole card goes when clicked — falls back to trackingId, then id,
   // so this still works for cards that don't pass an explicit actionTo.
-  const trackTo = actionTo ?? (role === 'rider' ? `/rider/job/${d.trackingId}` : `/customer/track/${d.trackingId }`)
+  const trackTo = actionTo ?? (role === 'rider' ? `/rider/job/${d.id}` : `/customer/track/${d.trackingId ?? d.id}`)
 
   function handleCardClick() {
     if (disableNavigation) return
@@ -86,7 +86,7 @@ export function TripCard({
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-bold text-slate-900">{d.trackingId}</p>
+        <p className="text-sm font-bold text-slate-900">{d.id}</p>
         <Badge variant={STATUS_VARIANT[d.status] ?? 'muted'}>{STATUS_LABEL[d.status] ?? d.status}</Badge>
       </div>
 

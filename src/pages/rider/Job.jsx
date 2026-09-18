@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ArrowLeft, Briefcase, CheckCircle2, Clock3, MapPin, PackageCheck, User } from 'lucide-react'
+import { ArrowLeft, Briefcase, CheckCircle2, Clock3, Hourglass, MapPin, PackageCheck, User, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell'
 import { DeliveryMap } from '@/components/delivery-map'
 import { TripCard } from '@/components/trip-card'
+import { ChatPanel, ChatLauncher } from '@/components/chat-panel'
 import { useRequireAuth } from '@/lib/use-require-auth'
-import { STATUS_LABEL } from '@/lib/mock-store'
-import { getDeliveries, updateRiderDeliveryStatus } from '@/services/api'
+import { useStore, useCurrentUser, updateDeliveryStatus, STATUS_LABEL } from '@/lib/api-store'
+import { getErrorMessage } from '@/services/api'
+import { getSocket } from '@/lib/socket'
 
 const NEXT = {
   accepted: { next: 'picked_up', label: 'Mark as picked up' },
@@ -22,41 +25,50 @@ const TABS = [
 
 export default function RiderJob() {
   const user = useRequireAuth('rider')
+  const { user: currentUser } = useCurrentUser()
   const navigate = useNavigate()
   const location = useLocation()
   const { id } = useParams()
-  const [deliveries, setDeliveries] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [autoMove, setAutoMove] = useState(true)
+  const [dismissedRequests, setDismissedRequests] = useState(() => new Set())
+  const [chatOpen, setChatOpen] = useState(false)
+  const [chatUnread, setChatUnread] = useState(false)
 
   const searchParams = new URLSearchParams(location.search)
   const requestedTab = searchParams.get('tab')
   const activeTab = TABS.some((t) => t.id === requestedTab) ? requestedTab : 'requests'
 
-  useEffect(() => {
-    if (!user) return undefined
-    let cancelled = false
-    setLoading(true)
-    setError('')
-    getDeliveries()
-      .then((nextDeliveries) => {
-        if (!cancelled) setDeliveries(nextDeliveries)
-      })
-      .catch((requestError) => {
-        if (!cancelled) setError(requestError.message || 'Unable to load jobs.')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [user?.id])
+  const delivery = useStore((s) => s.deliveries.find((d) => d.id === id))
+  const availableRequests = useStore((s) => s.deliveries.filter((d) => d.status === 'pending' && (!d.riderId || d.riderId === currentUser?.id)))
+  const incoming = availableRequests.filter((d) => !dismissedRequests.has(d.id))
+  const activeJobs = useStore((s) =>
+    currentUser ? s.deliveries.filter((d) => d.riderId === currentUser.id && ['accepted', 'picked_up', 'in_transit'].includes(d.status)) : [],
+  )
+  const completed = useStore((s) =>
+    user ? s.deliveries.filter((d) => d.riderId === user.id && d.status === 'delivered') : [],
+  )
 
-  const delivery = deliveries.find((job) => job.id === id)
-  const incoming = deliveries.filter((job) => job.status === 'pending' && (!job.riderId || job.riderId === user?.id))
-  const activeJobs = user
-    ? deliveries.filter((job) => job.riderId === user.id && ['accepted', 'picked_up', 'in_transit'].includes(job.status))
-    : []
-  const completed = user ? deliveries.filter((job) => job.riderId === user.id && job.status === 'delivered') : []
+  useEffect(() => {
+    if (!delivery || delivery.status !== 'in_transit' || !autoMove) return
+    let frac = 0
+    const iv = setInterval(() => {
+      frac += 0.05
+      if (frac >= 1) {
+        clearInterval(iv)
+      }
+    }, 1500)
+    return () => clearInterval(iv)
+  }, [delivery?.status, id, autoMove])
+
+  useEffect(() => {
+    const socket = getSocket()
+    if (!socket || !id || chatOpen) return
+    const handler = (message) => {
+      if (message.orderId === id && String(message.sender) !== String(currentUser?.id)) setChatUnread(true)
+    }
+    socket.on('chat:message', handler)
+    return () => socket.off('chat:message', handler)
+  }, [id, chatOpen, currentUser?.id])
 
   const visibleJobs = useMemo(() => {
     if (activeTab === 'active') return activeJobs
@@ -76,21 +88,21 @@ export default function RiderJob() {
 
   async function accept(jobId) {
     try {
-      const updated = await updateRiderDeliveryStatus(jobId, 'accepted')
-      setDeliveries((current) => current.map((job) => job.id === updated.id ? updated : job))
+      await updateDeliveryStatus(jobId, 'accepted')
+      toast.success('Job accepted')
       navigate('/rider/job?tab=active')
-    } catch (requestError) {
-      setError(requestError.message || 'Unable to accept this job.')
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Unable to accept this job.'))
     }
   }
 
-  async function reject(jobId) {
-    try {
-      const updated = await updateRiderDeliveryStatus(jobId, 'cancelled')
-      setDeliveries((current) => current.map((job) => job.id === updated.id ? updated : job))
-    } catch (requestError) {
-      setError(requestError.message || 'Unable to reject this job.')
-    }
+  function reject(jobId) {
+    setDismissedRequests((current) => {
+      const next = new Set(current)
+      next.add(jobId)
+      return next
+    })
+    toast.message('Request hidden from your list')
   }
 
   if (!id) {
@@ -129,11 +141,8 @@ export default function RiderJob() {
             ))}
           </div>
 
-          {error ? <p className="mb-4 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p> : null}
           <section className="space-y-3">
-            {loading ? (
-              <p className="py-10 text-center text-sm text-slate-500">Loading jobs...</p>
-            ) : visibleJobs.length === 0 ? (
+            {visibleJobs.length === 0 ? (
               <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
                 <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
                   <Briefcase className="h-6 w-6" />
@@ -169,6 +178,12 @@ export default function RiderJob() {
   }
 
   const nextStep = NEXT[delivery.status]
+  // "Start trip" (picked_up -> in_transit) waits on the customer confirming
+  // from their track page. The server enforces this too (see
+  // rider.services.js) — this is just so the button reflects reality
+  // instead of letting the rider tap it and get a rejected request.
+  const waitingOnCustomer = delivery.status === 'picked_up' && delivery.type === 'ride' && !delivery.customerConfirmed
+  const startTripBlocked = nextStep?.next === 'in_transit' && waitingOnCustomer
 
   return (
     <AppShell>
@@ -193,7 +208,12 @@ export default function RiderJob() {
             <div className="mt-6 space-y-4">
               <JobDetail Icon={MapPin} label="Pickup" value={delivery.pickup.address} />
               <JobDetail Icon={MapPin} label="Dropoff" value={delivery.dropoff.address} />
-              <JobDetail Icon={User} label="Customer" value={delivery.customerName} />
+              <div className="flex items-center justify-between gap-3">
+                <JobDetail Icon={User} label="Customer" value={delivery.customerName} />
+                {['accepted', 'picked_up', 'in_transit'].includes(delivery.status) && (
+                  <ChatLauncher hasUnread={chatUnread} onClick={() => { setChatOpen(true); setChatUnread(false) }} />
+                )}
+              </div>
             </div>
           </div>
 
@@ -206,18 +226,46 @@ export default function RiderJob() {
             </div>
 
             {nextStep ? (
-              <button
-                onClick={() => {
-                  updateRiderDeliveryStatus(id, nextStep.next)
-                    .then((updated) => {
-                      setDeliveries((current) => current.map((job) => job.id === updated.id ? updated : job))
-                    })
-                    .catch((requestError) => setError(requestError.message || 'Unable to update this job.'))
-                }}
-                className="w-full rounded-xl bg-emerald-600 py-3 font-bold text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-500"
-              >
-                {nextStep.label}
-              </button>
+              <div className="space-y-3">
+                {startTripBlocked && (
+                  <p className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-700">
+                    <Hourglass className="h-3.5 w-3.5 shrink-0" /> Waiting for the customer to confirm on their track page — this unlocks automatically.
+                  </p>
+                )}
+                <button
+                  disabled={startTripBlocked}
+                  onClick={async () => {
+                    try {
+                      await updateDeliveryStatus(id, nextStep.next)
+                      toast.success('Job updated')
+                    } catch (error) {
+                      toast.error(getErrorMessage(error, 'Unable to update this job.'))
+                      return
+                    }
+                    if (nextStep.next === 'in_transit') setAutoMove(true)
+                  }}
+                  className="w-full rounded-xl bg-emerald-600 py-3 font-bold text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-emerald-600"
+                >
+                  {nextStep.label}
+                </button>
+                {['accepted', 'picked_up', 'in_transit'].includes(delivery.status) && (
+                  <button
+                    onClick={async () => {
+                      if (!window.confirm('Are you sure you want to cancel this job?')) return
+                      try {
+                        await updateDeliveryStatus(id, 'cancelled')
+                        toast.success('Job cancelled')
+                        navigate('/rider/job')
+                      } catch (error) {
+                        toast.error(getErrorMessage(error, 'Unable to cancel this job.'))
+                      }
+                    }}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl border border-red-200 py-3 text-sm font-bold text-red-500 hover:bg-red-50 transition-colors"
+                  >
+                    <X className="h-4 w-4" /> Cancel job
+                  </button>
+                )}
+              </div>
             ) : delivery.status === 'delivered' ? (
               <div>
                 <p className="flex items-center gap-2 text-sm font-bold text-emerald-600">
@@ -245,6 +293,16 @@ export default function RiderJob() {
           />
         </section>
       </main>
+
+      {['accepted', 'picked_up', 'in_transit'].includes(delivery.status) && (
+        <ChatPanel
+          orderId={delivery.id}
+          currentUserId={currentUser?.id}
+          otherPartyLabel={delivery.customerName || 'Customer'}
+          open={chatOpen}
+          onOpenChange={setChatOpen}
+        />
+      )}
     </AppShell>
   )
 }

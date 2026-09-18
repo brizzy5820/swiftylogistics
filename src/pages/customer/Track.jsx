@@ -1,32 +1,110 @@
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Phone, X, CheckCircle, ArrowLeft, ClipboardList, UserCheck, Package, Truck, Copy, MapPinned, LoaderCircle, MapPin, Search } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { DeliveryMap } from '@/components/delivery-map'
 import { MobileDrawer } from '@/components/mobile-drawer'
 import { TripCard } from '@/components/trip-card'
-import { getDelivery } from '@/services/api'
+import { ChatPanel, ChatLauncher } from '@/components/chat-panel'
 // Trip tracking is publicly viewable by code; only the "my trips" list requires sign-in.
-import { useStore, updateDeliveryStatus, STATUS_LABEL, getCurrentUser } from '@/lib/mock-store'
+import { useStore, useCurrentUser, updateDeliveryStatus, confirmOrder, STATUS_LABEL } from '@/lib/api-store'
+import { getErrorMessage, getPublicTracking } from '@/services/api'
+import { getSocket } from '@/lib/socket'
+import { Skeleton, SkeletonText, SkeletonCard, SkeletonAvatar, SkeletonMap, SkeletonListItem } from '@/components/ui/skeleton'
 
 function formatTime(ts) {
   if (!ts) return null
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+const POLLING_INTERVAL_MS = 5000
+
 export default function Track() {
-  const user = getCurrentUser()
-  const { trackingId: routeTrackingId } = useParams()
+  const { user, loading } = useCurrentUser()
+  const { id } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
   const [copied, setCopied] = useState(false)
   const [lookupSettled, setLookupSettled] = useState(false)
   const [trackingCode, setTrackingCode] = useState('')
   const [outcomeBannerDismissed, setOutcomeBannerDismissed] = useState(false)
+  const [publicDelivery, setPublicDelivery] = useState(null)
+  const [errorMessage, setErrorMessage] = useState('')
+  const [chatOpen, setChatOpen] = useState(false)
+  const [chatUnread, setChatUnread] = useState(false)
   const deliveries = useStore((s) => (user ? s.deliveries.filter((d) => d.customerId === user.id) : []))
-  const delivery = useStore((s) => s.deliveries.find((d) => d.trackingId === routeTrackingId))
-  const trackingId = location.state?.trackingId ?? delivery?.trackingId ?? routeTrackingId
-  const deliveryId = delivery?.trackingId
+  const delivery = useStore((s) => s.deliveries.find((d) => d.id === id || d.aciveTrackingId === id))
+  const pollingRef = useRef(null)
+  const confirmedRef = useRef(new Set())
+
+  useEffect(() => {
+    if (!id || delivery || !id.startsWith('TRK-') && !id.startsWith('RIDE-')) return
+    let active = true
+    getPublicTracking(id).then((data) => { if (active) setPublicDelivery(data.tracking) }).catch((error) => {
+      if (active) setErrorMessage(getErrorMessage(error, 'Unable to load tracking details.'))
+    })
+    return () => { active = false }
+  }, [id, delivery])
+  
+  const effectiveDelivery = delivery || publicDelivery
+  const trackingId = location.state?.trackingId ?? effectiveDelivery?.trackingId ?? id
+  const deliveryId = effectiveDelivery?.id
+  const deliveryView = effectiveDelivery
+
+  // Landing on the live track page with a rider already assigned counts as
+  // the customer's confirmation — this is what unlocks "Start trip" on the
+  // rider's side (server-enforced; see rider.services.js).
+  useEffect(() => {
+    if (!user || !deliveryView) return
+    if (!deliveryView.riderName || deliveryView.customerConfirmed) return
+    if (confirmedRef.current.has(deliveryView.id)) return
+    confirmedRef.current.add(deliveryView.id)
+    confirmOrder(deliveryView.id).catch(() => confirmedRef.current.delete(deliveryView.id))
+  }, [user, deliveryView?.id, deliveryView?.riderName, deliveryView?.customerConfirmed])
+
+  // Show an unread dot on the chat launcher when a message arrives while
+  // the panel is closed.
+  useEffect(() => {
+    const socket = getSocket()
+    if (!socket || !deliveryId || chatOpen) return
+    const handler = (message) => {
+      if (message.orderId === deliveryId && String(message.sender) !== String(user?.id)) setChatUnread(true)
+    }
+    socket.on('chat:message', handler)
+    return () => socket.off('chat:message', handler)
+  }, [deliveryId, chatOpen, user?.id])
+
+  // Polling for public tracking real-time updates (when user is not logged in or tracking public link)
+  useEffect(() => {
+    if (!deliveryId || !deliveryView || user) return
+    
+    const statusesToPoll = ['pending', 'accepted', 'picked_up', 'in_transit']
+    if (!statusesToPoll.includes(deliveryView.status)) return
+
+    const poll = async () => {
+      try {
+        const data = await getPublicTracking(deliveryId)
+        if (data?.tracking && data.tracking.status !== deliveryView.status) {
+          setPublicDelivery(data.tracking)
+        }
+      } catch (error) {
+        console.error('Polling failed:', error)
+      }
+    }
+
+    // Initial poll
+    poll()
+    
+    // Set up interval
+    pollingRef.current = setInterval(poll, POLLING_INTERVAL_MS)
+    
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+      }
+    }
+  }, [deliveryId, deliveryView?.status, user])
+
   const searchParams = new URLSearchParams(location.search)
   const requestedTab = searchParams.get('tab')
 // top of Track component, alongside your other state
@@ -41,12 +119,9 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
 
   useEffect(() => {
     setLookupSettled(false)
-    if (routeTrackingId && !delivery) {
-      getDelivery(routeTrackingId).catch(() => null)
-    }
     const timeout = window.setTimeout(() => setLookupSettled(true), 600)
     return () => window.clearTimeout(timeout)
-  }, [routeTrackingId, delivery])
+  }, [id])
 
   useEffect(() => {
     if (!copied) return
@@ -56,7 +131,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
 
   useEffect(() => {
     setOutcomeBannerDismissed(false)
-  }, [deliveryId, delivery?.status])
+  }, [deliveryId, deliveryView?.status])
 
   function handleCopy() {
     if (!trackingId) return
@@ -70,7 +145,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
     navigate(`/customer/track/${encodeURIComponent(value)}`, { state: { trackingId: value } })
   }
 
-  if (!user && !routeTrackingId) {
+  if (!user && !id) {
     return (
       <AppShell>
         <main className="mx-auto flex min-h-[60vh] max-w-3xl flex-col items-center justify-center px-6 py-12 text-center">
@@ -85,8 +160,28 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
     )
   }
 
+  // Show skeleton while user is loading
+  if (loading) {
+    return (
+      <AppShell>
+        <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+          <div className="mb-6 flex flex-col gap-2">
+            <Skeleton className="h-8 w-48 rounded-xl" />
+            <Skeleton className="h-4 w-64 rounded" />
+          </div>
+          <SkeletonCard />
+          <div className="mt-6 space-y-3">
+            {[1, 2, 3].map((i) => (
+              <SkeletonListItem key={i} />
+            ))}
+          </div>
+        </main>
+      </AppShell>
+    )
+  }
+
   const handleBack = () => {
-    if(routeTrackingId){
+     if(id){
         navigate('/customer/history')
     }
     else if (window.history.state && window.history.state.idx > 0) {
@@ -97,7 +192,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
    
   }
 
-  if (!routeTrackingId) {
+  if (!id) {
     const orderedDeliveries = [...deliveries].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
     const tabDefinitions = [
       {
@@ -162,14 +257,14 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
                   key={tab.key}
                   type="button"
                   onClick={() => navigate(`/customer/track?tab=${tab.key}`)}
-                  className={`min-w-0 rounded-xl px-2 py-2.5 text-center text-[11px] font-bold transition-colors sm:text-sm ${
+                  className={`min-w-0 rounded-xl px-2 py-2.5 text-center text-[11px] font-bold flex items-center justify-center gap-3 transition-colors sm:text-sm ${
                     activeTab === tab.key
                       ? 'bg-emerald-600 text-white'
                       : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
                   }`}
                 >
-                  <span className="block truncate">{tab.label}</span>
-                  <span className={`mt-0.5 block text-[10px] ${activeTab === tab.key ? 'text-white/70' : 'text-slate-400'}`}>
+                  <span className=" truncate">{tab.label}</span>
+                  <span className={`mt-0.5text-[10px] ${activeTab === tab.key ? 'text-white/70' : 'text-slate-400'}`}>
                     {tab.items.length}
                   </span>
                 </button>
@@ -188,7 +283,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
               </div>
             ) : (
               displayedDeliveries.map((item) => (
-                <TripCard key={item.id} delivery={item} actionTo={`/customer/track/${item.trackingId}`} />
+                <TripCard key={item.id} delivery={item} actionTo={`/customer/track/${item.id}`} />
               ))
             )}
           </div>
@@ -197,17 +292,17 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
     )
   }
 
-  if (!delivery && !lookupSettled)
+  if (!effectiveDelivery && !lookupSettled)
     return (
       <AppShell>
-        <main className="mx-auto flex  max-w-3xl flex-col items-center justify-center px-6 py-12 text-center">
-          <LoaderCircle className="h-10 w-10 animate-spin text-emerald-600" />
-          <p className="mt-4 text-sm font-semibold text-slate-600">Loading tracking details...</p>
+        <main className="mx-auto flex max-w-3xl flex-col items-center justify-center px-6 py-12 text-center">
+          <SkeletonAvatar size="xl" className="mx-auto" />
+          <SkeletonText lines={2} className="mt-4 max-w-md mx-auto" />
         </main>
       </AppShell>
     )
 
-  if (!delivery)
+  if (!effectiveDelivery)
     return (
       <AppShell>
         <main className="mx-auto flex  max-w-3xl flex-col items-center justify-center px-6 py-12 text-center">
@@ -215,7 +310,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
             <MapPinned className="h-8 w-8" />
           </div>
           <h1 className="text-2xl font-bold text-slate-900">No shipment found</h1>
-          <p className="mt-2 text-sm text-slate-500">This tracking link does not match a live delivery yet.</p>
+          <p className="mt-2 text-sm text-slate-500">{errorMessage || 'This tracking link does not match a live delivery yet.'}</p>
           <button onClick={handleBack} className="mt-6 inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900">
             <ArrowLeft className="h-4 w-4" />
           </button>
@@ -223,11 +318,13 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
       </AppShell>
     )
 
-  const isCancelled = delivery.status === 'cancelled'
-  const isDelivered = delivery.status === 'delivered'
-  const riderAssigned = !!delivery.riderName
-  const canCancel = delivery.status === 'pending'
-  const canContact = riderAssigned && !isDelivered && !isCancelled
+  const isCancelled = deliveryView.status === 'cancelled'
+  const isDelivered = deliveryView.status === 'delivered'
+  const riderAssigned = !!deliveryView.riderName
+  // Check if terminated: rider cancelled or no driver found (pending but no rider assigned after timeout)
+  const isTerminated = isCancelled || (deliveryView.status === 'pending' && !riderAssigned && deliveryView.timedOut)
+  const canCancel = Boolean(user) && deliveryView.status === 'pending'
+  const canContact = riderAssigned && !isDelivered && !isCancelled && !isTerminated
 
   const steps = [
     { key: 'pending', label: 'Order placed', Icon: ClipboardList },
@@ -236,10 +333,15 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
     { key: 'in_transit', label: 'In transit', Icon: Truck },
     { key: 'delivered', label: 'Delivered', Icon: CheckCircle },
   ]
-  const currentIdx = steps.findIndex((s) => s.key === delivery.status)
+  const currentIdx = steps.findIndex((s) => s.key === deliveryView.status)
 
-  function handleCancel() {
-    updateDeliveryStatus(delivery.trackingId, 'cancelled')
+  async function handleCancel() {
+    setErrorMessage('')
+    try {
+      await updateDeliveryStatus(deliveryView.id, 'cancelled')
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, 'Unable to cancel this order.'))
+    }
   }
 
   const banner = !outcomeBannerDismissed && isDelivered ? (
@@ -284,8 +386,8 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Status</p>
-              <p className={`mt-1 font-display text-2xl font-bold ${isCancelled ? 'text-red-500' : isDelivered ? 'text-emerald-600' : 'text-emerald-600'}`}>
-                {STATUS_LABEL[delivery.status]}
+              <p className={`mt-1 font-display text-2xl font-bold ${isCancelled || isTerminated ? 'text-red-500' : isDelivered ? 'text-emerald-600' : 'text-emerald-600'}`}>
+                {isTerminated ? 'Terminated' : STATUS_LABEL[deliveryView.status]}
               </p>
             </div>
             <button onClick={handleCopy} className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">
@@ -293,16 +395,16 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
             </button>
           </div>
           <p className="mt-2 text-sm text-slate-500">Tracking ID · {trackingId}</p>
-          {!isDelivered && !isCancelled && (
-            <p className="mt-1 text-sm text-slate-500">ETA · {delivery.etaMinutes} min</p>
+          {!isDelivered && !isCancelled && !isTerminated && (
+            <p className="mt-1 text-sm text-slate-500">ETA · {deliveryView.etaMinutes} min</p>
           )}
 
-          {!isCancelled && (
+          {!isCancelled && !isTerminated && (
             <ol className="mt-6 space-y-3">
               {steps.map((s, i) => {
                 const done = i <= currentIdx
                 const isCurrent = i === currentIdx && !isDelivered
-                const timestamp = delivery.statusTimestamps?.[s.key]
+                const timestamp = deliveryView.statusTimestamps?.[s.key]
                 const { Icon } = s
                 return (
                   <li key={s.key} className="flex items-start gap-3">
@@ -328,6 +430,9 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
               })}
             </ol>
           )}
+          {isTerminated && (
+            <p className="mt-4 text-center text-red-500 font-semibold">This ride was terminated - no driver was assigned or the driver cancelled</p>
+          )}
         </div>
 
         {/* Courier card */}
@@ -335,22 +440,29 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Your courier</p>
           <div className="mt-3 flex items-center gap-4">
             <div className="size-12 rounded-xl bg-emerald-50 flex items-center justify-center font-bold text-emerald-600">
-              {(delivery.riderName ?? '—').split(' ').map((n) => n[0]).join('').slice(0, 2)}
+              {(deliveryView.riderName ?? '—').split(' ').map((n) => n[0]).join('').slice(0, 2)}
             </div>
             <div className="flex-1">
-              <p className="text-sm font-bold">{delivery.riderName ?? 'Awaiting rider…'}</p>
-              {riderAssigned && (
+              <p className="text-sm font-bold">
+                {isTerminated ? 'Terminated' : deliveryView.riderName ?? 'Awaiting rider…'}
+              </p>
+              {riderAssigned && !isTerminated && (
                 <p className="text-xs text-amber-500">★ 4.9 <span className="text-slate-400">(1,240 trips)</span></p>
               )}
             </div>
             {canContact && (
-              <button
-                className="flex items-center justify-center size-10 rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
-                title="Contact rider"
-                onClick={() => alert('In a real app, this would open a chat or call the rider.')}
-              >
-                <Phone className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                <ChatLauncher hasUnread={chatUnread} onClick={() => { setChatOpen(true); setChatUnread(false) }} />
+                {deliveryView.rider?.phone && (
+                  <a
+                    href={`tel:${deliveryView.rider.phone}`}
+                    className="flex items-center justify-center size-10 rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                    title="Call rider"
+                  >
+                    <Phone className="h-4 w-4" />
+                  </a>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -359,17 +471,23 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-3">
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">From</p>
-            <p className="text-sm font-medium">{delivery.pickup.address}</p>
+            <p className="text-sm font-medium">{deliveryView.pickup.address}</p>
           </div>
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">To</p>
-            <p className="text-sm font-medium">{delivery.dropoff.address}</p>
+            <p className="text-sm font-medium">{deliveryView.dropoff.address}</p>
           </div>
           <div className="flex items-center justify-between pt-3 border-t border-slate-200">
-            <span className="text-xs text-slate-500">{delivery.type === 'ride' ? `Ride · ${delivery.rideType || ''}` : `Delivery · ${delivery.packageType || ''}`} · {delivery.distanceKm} km</span>
-            <span className="font-display font-bold">₦{delivery.price}</span>
+            <span className="text-xs text-slate-500">{deliveryView.type === 'ride' ? `Ride · ${deliveryView.rideType || ''}` : `Delivery · ${deliveryView.packageType || ''}`} · {deliveryView.distanceKm} km</span>
+            <span className="font-display font-bold">₦{deliveryView.price}</span>
           </div>
         </div>
+
+        {errorMessage && (
+          <p className="whitespace-pre-line rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+            {errorMessage}
+          </p>
+        )}
 
         {/* Cancel button — only for pending */}
         {canCancel && (
@@ -387,7 +505,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
   const livePill = (
     <div className="flex items-center gap-2 rounded-full px-4">
       <div className={`size-2 rounded-full ${isCancelled ? 'bg-red-400' : isDelivered ? 'bg-emerald-500' : 'bg-emerald-500 animate-pulse'}`} />
-      <span className="text-2xs text-gray-100 lg:text-black font-bold">Live · {delivery.trackingId}</span>
+      <span className="text-2xs text-gray-100 lg:text-black font-bold">Live · {deliveryView.id}</span>
     </div>
   )
 
@@ -406,11 +524,11 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
       style={{ bottom: sheetHeightPx }}
     >
       <DeliveryMap
-        pickup={delivery.pickup.coords}
-        dropoff={delivery.dropoff.coords}
-        courier={delivery.courierPosition}
-        courierInfo={{ riderName: delivery.riderName, rideType: delivery.rideType, phone: delivery.riderPhone }}
-        destination={delivery.dropoff.coords}
+        pickup={deliveryView.pickup.coords}
+        dropoff={deliveryView.dropoff.coords}
+        courier={deliveryView.courierPosition}
+        courierInfo={{ riderName: deliveryView.riderName, rideType: deliveryView.rideType, phone: deliveryView.rider?.phone }}
+        destination={deliveryView.dropoff.coords}
         className="h-full w-full"
       />
     </div>
@@ -436,7 +554,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
     onHeightChange={handleSheetHeightChange}
   >
     <DetailPanel />
-  </MobileDrawer>4
+  </MobileDrawer>
 </div>
       {/* ── Desktop: side-by-side grid (no drag — real layout space, not a floating sheet) ── */}
       <main className="hidden px-4 mt-4 sm:px-6 lg:px-8 py-6 max-w-7xl lg:py-3 mx-auto lg:block">
@@ -459,16 +577,26 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
             </aside>
             <section className="relative h-[50vh] sm:h-[60vh] lg:sticky lg:top-24 lg:col-span-8 lg:h-[calc(100vh-7rem)]">
               <DeliveryMap
-                pickup={delivery.pickup.coords}
-                dropoff={delivery.dropoff.coords}
-                courier={delivery.courierPosition}
-                courierInfo={{ riderName: delivery.riderName, rideType: delivery.rideType, phone: delivery.riderPhone }}
-                destination={delivery.dropoff.coords}
+                pickup={deliveryView.pickup.coords}
+                dropoff={deliveryView.dropoff.coords}
+                courier={deliveryView.courierPosition}
+                courierInfo={{ riderName: deliveryView.riderName, rideType: deliveryView.rideType, phone: deliveryView.rider?.phone }}
+                destination={deliveryView.dropoff.coords}
                 className="h-full"
               />
             </section>
           </div>
       </main>
+
+      {canContact && (
+        <ChatPanel
+          orderId={deliveryView.id}
+          currentUserId={user?.id}
+          otherPartyLabel={deliveryView.riderName || 'Your rider'}
+          open={chatOpen}
+          onOpenChange={setChatOpen}
+        />
+      )}
     </>
   )
 }

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Bike, Star, AlertTriangle, CheckCircle2, Trash2, Edit, KeyRound, CarFront, PackageCheck, Wallet, Plus } from 'lucide-react'
 import { useRequireAdmin } from '../../lib/use-require-admin'
-import { useStore, updateUser, deleteUser, forgotPassword, createUser, adminSetPassword } from '../../lib/mock-store'
+import { useStore, updateUser, deleteUser, createUser, adminSetPassword } from '../../lib/api-store'
 import { AdminShell } from '../../components/admin/AdminShell'
 import { DataTable, AdminModal, DetailRow, CopyChip } from '../../components/admin/DataTable'
 
@@ -32,22 +32,20 @@ export default function AdminRiders() {
     setAddError('')
     setAdding(true)
   }
-  function submitAdd() {
+  async function submitAdd() {
     setAddError('')
     if (!addForm.name.trim() || !addForm.email.trim() || !addForm.password.trim()) {
       setAddError('Name, email, and password are required.')
       return
     }
-    const created = createUser({ ...addForm, role: 'rider' })
-    if (!created) {
-      setAddError('An account with that email already exists.')
-      return
+    try {
+      const created = await createUser({ ...addForm, role: 'rider' })
+      setAdding(false)
+      setNotice(`Rider ${created.name} added.`)
+    } catch (error) {
+      setAddError(error.message || 'Unable to create rider.')
     }
-    setAdding(false)
-    setNotice(`Rider ${created.name} added.`)
   }
-
-  // const riders = useMemo(() => users.filter((u) => u.role === 'rider'), [users])
 
   const columns = useMemo(() => [
     {
@@ -109,51 +107,47 @@ export default function AdminRiders() {
   }
   function close() { setSelected(null); setEditing(false); setNotice('') }
 
-  function saveEdit() {
+  async function saveEdit() {
     if (!selected) return
-    updateUser(selected.id, { name: editName.trim() || selected.name, phone: editPhone.trim() })
+    try {
+      await updateUser(selected.id, { name: editName.trim() || selected.name, phone: editPhone.trim() })
+    } catch (error) { setNotice(error.message || 'Unable to update user.'); return }
     setNotice('Rider updated.')
     setEditing(false)
   }
 
   function resetPwd() {
     if (!selected) return
-    forgotPassword(selected.email)
-    setNotice(`Password reset to reset1234 for ${selected.email}.`)
+    setShowPwd(true)
+    setNotice('Enter a new password to update this account.')
   }
 
-  function setPassword() {
+  async function setPassword() {
     if (!selected) return
     if (!newPwd.trim()) {
       setNotice('Enter a new password first.')
       return
     }
-    const updated = adminSetPassword(selected.id, newPwd.trim())
-    if (updated) {
-      setNotice(`Password updated for ${selected.email}. They can log in with the new password right away.`)
+    try {
+      await adminSetPassword(selected.id, newPwd.trim())
+      setNotice(`Password updated for ${selected.email}.`)
       setNewPwd('')
       setShowPwd(false)
+    } catch (error) {
+      setNotice(error.message || 'Unable to update password.')
     }
   }
 
-  function remove() {
+  async function remove() {
     if (!selected) return
     if (!confirm(`Delete rider ${selected.name}? Their jobs will also be removed.`)) return
-    deleteUser(selected.id)
-    close()
+    try { await deleteUser(selected.id); close() } catch (error) { setNotice(error.message || 'Unable to delete user.') }
   }
 
   function verify() {
     if (!selected) return
-    updateUser(selected.id, {
-      vehicleType: selected.vehicleType || 'Bike',
-      plateNumber: selected.plateNumber || 'TBD',
-      licenseNumber: selected.licenseNumber || 'TBD',
-      nin: selected.nin || 'TBD',
-      bankName: selected.bankName || 'TBD',
-      accountNumber: selected.accountNumber || '0000000000',
-    })
-    setNotice('Rider marked as verified (demo placeholder values).')
+    updateUser(selected.id, { isActive: true })
+    setNotice('Rider account activated.')
   }
 
   const riderJobs = selected ? deliveries.filter((d) => d.riderId === selected.id).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)) : []

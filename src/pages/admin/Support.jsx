@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { LifeBuoy, Send, CheckCircle2, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { useRequireAdmin } from '../../lib/use-require-admin'
-import { useStore, replyToTicket, updateTicketStatus } from '../../lib/mock-store'
+import { useStore, replyToTicket, updateTicketStatus } from '../../lib/api-store'
 import { AdminShell } from '../../components/admin/AdminShell'
 import { DataTable } from '../../components/admin/DataTable'
 

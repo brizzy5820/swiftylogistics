@@ -44,14 +44,13 @@ const loginSchema = z
       .string()
       .min(1, "Password is required")
       .max(128, "Password is too long"),
-      
-        role: z
-      .enum(["customer", "rider"])
-      .default("customer"),
   })
   .strict();
+
+const changePasswordSchema = z.object({ password: z.string().min(8).max(128) }).strict();
 
 export {
   registerSchema,
   loginSchema,
+  changePasswordSchema,
 };

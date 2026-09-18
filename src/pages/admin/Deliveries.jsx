@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PackageCheck, Trash2, RotateCcw, MapPinned, Edit } from 'lucide-react'
 import { useRequireAdmin } from '../../lib/use-require-admin'
-import { useStore, updateDeliveryStatus, deleteDelivery, adminResetDelivery, STATUS_LABEL } from '../../lib/mock-store'
+import { useStore, updateDeliveryStatus, deleteDelivery, adminResetDelivery, STATUS_LABEL } from '../../lib/api-store'
 import { AdminShell } from '../../components/admin/AdminShell'
 import { DataTable, AdminModal, DetailRow, StatusPill, CopyChip } from '../../components/admin/DataTable'
 

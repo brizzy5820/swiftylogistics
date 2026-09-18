@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, LifeBuoy, MessageCircleMore, PhoneCall, Send } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { useRequireAuth } from '@/lib/use-require-auth'
+import { createSupportTicket } from '@/lib/api-store'
 
 export default function Help() {
   const user = useRequireAuth('customer')
@@ -18,10 +19,16 @@ export default function Help() {
     }
   }
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
-    setSubmitted(true)
-    setMessage('')
+    if (!message.trim()) return
+    try {
+      await createSupportTicket({ subject: 'Customer support request', message: message.trim(), priority: 'normal' })
+      setSubmitted(true)
+      setMessage('')
+    } catch {
+      setSubmitted(false)
+    }
   }
 
   if (!user) return null

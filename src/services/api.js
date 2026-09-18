@@ -1,405 +1,130 @@
-import {
-  setDeliveries,
-  upsertDelivery,
-  setUsers,
-  upsertUser,
-  setSession,
-} from '@/lib/mock-store'
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "/api";
+export { API_BASE_URL }
 
-export { API_BASE_URL };
+const TOKEN_KEY = 'swifty_access_token'
 
-const getToken = () => {
-  return sessionStorage.getItem("swifty_access_token");
-};
+const getToken = () => localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY)
+
+export const setToken = (token) => {
+  localStorage.setItem(TOKEN_KEY, token)
+  sessionStorage.setItem(TOKEN_KEY, token)
+}
+
+export const clearToken = () => {
+  localStorage.removeItem(TOKEN_KEY)
+  sessionStorage.removeItem(TOKEN_KEY)
+}
+
+export const getErrorMessage = (error, fallback = 'Something went wrong. Please try again.') => {
+  if (!error) return fallback
+  if (error.data?.errors?.length) {
+    return error.data.errors
+      .map((item) => item.field ? `${item.field}: ${item.message}` : item.message)
+      .join('\n')
+  }
+  if (error.status === 0) return 'Unable to reach the server. Please check your connection and try again.'
+  if (error.status === 401) return 'Your session has expired. Please sign in again.'
+  if (error.status === 403) return error.message || 'You do not have permission to perform this action.'
+  if (error.status === 404) return error.message || 'The requested record could not be found.'
+  if (error.status >= 500) return 'The server had a problem. Please try again shortly.'
+  return error.message || fallback
+}
 
 const request = async (endpoint, options = {}) => {
-  const token = getToken();
-
-  const response = await fetch(
-    `${API_BASE_URL}${endpoint}`,
-    {
+  const token = getToken()
+  let response
+  try {
+    response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
       headers: {
-        "Content-Type": "application/json",
-        ...(token
-          ? {
-              Authorization: `Bearer ${token}`,
-            }
-          : {}),
+        ...(options.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...options.headers,
       },
-    }
-  );
+    })
+  } catch (cause) {
+    const error = new Error('Unable to reach the server. Please check your connection and try again.')
+    error.status = 0
+    error.cause = cause
+    throw error
+  }
 
-  const data = await response.json();
+  const text = await response.text()
+  let data = {}
+  try { data = text ? JSON.parse(text) : {} } catch { data = { message: text } }
 
   if (!response.ok) {
-    throw new Error(
-      data.message || "Something went wrong"
-    );
+    const error = new Error(data.message || 'Something went wrong')
+    error.status = response.status
+    error.data = data
+    throw error
   }
+  
 
-  return data;
-};
-
-function normalizeUser(raw) {
-  if (!raw || typeof raw !== "object") return raw;
-  const { _id, ...rest } = raw;
-  return { id: String(_id), ...rest };
+  return data
 }
 
-function normalizeDelivery(raw) {
-  if (!raw || typeof raw !== "object") return raw;
-  const { _id, customer, rider, ...rest } = raw;
-  const riderObj = rider && typeof rider === "object" ? rider : null;
-  return {
-    id: String(_id),
-    customerId: customer ? String(customer) : String(rest.customer?._id || ""),
-    customerName: rest.customerName || (rest.customer?.name) || "",
-    riderId: riderObj ? String(riderObj._id) : rest.riderId || null,
-    riderName: riderObj?.name || rest.riderName || null,
-    ...rest,
-  };
-}
+export { request }
 
-function unwrap(data) {
-  if (!data || typeof data !== "object") return data;
-  if (Array.isArray(data)) return data.map(unwrap);
-  if (data.success && data.user) return normalizeUser(data.user);
-  if (data.success && data.deliveries) return data.deliveries.map(normalizeDelivery);
-  if (data.success && data.delivery) return normalizeDelivery(data.delivery);
-  if (data.success && data.address) return data.address;
-  if (data.success && data.addresses) return data.addresses.map(normalizeUser);
-  if (data.success && data.rider) return normalizeUser(data.rider);
-  if (data.success && data.tracking) return data.tracking;
-  if (data.success && data.ride) return normalizeDelivery(data.ride);
-  if (data.success && data.rides) return data.rides.map(normalizeDelivery);
-  if (data.success && data.riders) return data.riders.map(normalizeUser);
-  return data;
-}
+export const register = (payload) => request('/auth/register', { method: 'POST', body: JSON.stringify(payload) })
+export const login = (payload) => request('/auth/login', { method: 'POST', body: JSON.stringify(payload) })
+export const getMe = () => request('/auth/me')
+export const changePassword = (password) => request('/auth/password', { method: 'PATCH', body: JSON.stringify({ password }) })
+export const updateMe = (payload) => request('/users/me', { method: 'PATCH', body: JSON.stringify(payload) })
+export const logout = clearToken
 
-function syncUserToStore(user) {
-  if (user && user.id) {
-    upsertUser(user)
-    setSession({ userId: user.id, role: user.role })
-  }
-}
+export const getAddresses = () => request('/addresses')
+export const createAddress = (payload) => request('/addresses', { method: 'POST', body: JSON.stringify(payload) })
+export const updateAddress = (id, payload) => request(`/addresses/${id}`, { method: 'PATCH', body: JSON.stringify(payload) })
+export const deleteAddress = (id) => request(`/addresses/${id}`, { method: 'DELETE' })
 
-function syncDeliveriesToStore(deliveries) {
-  if (Array.isArray(deliveries)) {
-    setDeliveries(deliveries)
-  }
-}
+export const createDelivery = (payload) => request('/deliveries', { method: 'POST', body: JSON.stringify(payload) })
+export const getDeliveries = () => request('/deliveries')
+export const getDelivery = (id) => request(`/deliveries/${id}`)
+export const cancelDelivery = (id) => request(`/deliveries/${id}/cancel`, { method: 'PATCH' })
+export const getTracking = (id) => request(`/tracking/${id}`)
+export const getPublicTracking = (trackingId) => request(`/tracking/public/${encodeURIComponent(trackingId)}`)
+export const confirmTracking = (id) => request(`/tracking/${id}/confirm`, { method: 'PATCH' })
+export const getMessages = (id) => request(`/tracking/${id}/messages`)
 
-/* =========================
-   AUTH
-   ========================= */
+export const createRide = (payload) => request('/rides', { method: 'POST', body: JSON.stringify(payload) })
+export const getRides = () => request('/rides')
+export const getRide = (id) => request(`/rides/${id}`)
+export const cancelRide = (id) => request(`/rides/${id}/cancel`, { method: 'PATCH' })
+export const assignRide = (id) => request(`/rides/${id}/assign`, { method: 'PATCH' })
 
-export async function register(payload) {
-  const data = await request("/auth/register", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+export const getNotifications = () => request('/notifications')
+export const getUnreadCount = () => request('/notifications/unread-count')
+export const markNotificationRead = (id) => request(`/notifications/${id}/read`, { method: 'PATCH' })
+export const markAllNotificationsRead = () => request('/notifications/read-all', { method: 'PATCH' })
 
-  if (data.accessToken) {
-    sessionStorage.setItem("swifty_access_token", data.accessToken);
-  }
+export const getRiderProfile = () => request('/riders/me')
+export const updateRiderProfile = (payload) => request('/riders/me', { method: 'PATCH', body: JSON.stringify(payload) })
+export const getRiderJobs = () => request('/riders/jobs')
+export const getRiderJob = (id) => request(`/riders/jobs/${id}`)
+export const acceptRiderJob = (id) => request(`/riders/jobs/${id}/accept`, { method: 'PATCH' })
+export const updateRiderDeliveryStatus = (id, status) => request(`/riders/deliveries/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) })
 
-  const user = unwrap(data.user || data)
-  syncUserToStore(user)
+export const getAdminDashboard = () => request('/admin/dashboard')
+export const getAdminUsers = (query = '') => request(`/admin/users${query ? `?${query}` : ''}`)
+export const getAdminUser = (id) => request(`/admin/users/${id}`)
+export const updateAdminUser = (id, payload) => request(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(payload) })
+export const setAdminUserPassword = (id, password) => request(`/admin/users/${id}/password`, { method: 'PATCH', body: JSON.stringify({ password }) })
+export const updateAdminUserStatus = (id, isActive) => request(`/admin/users/${id}/status`, { method: 'PATCH', body: JSON.stringify({ isActive }) })
+export const getAdminRiders = (query = '') => request(`/admin/riders${query ? `?${query}` : ''}`)
+export const getAdminOrders = (query = '') => request(`/admin/orders${query ? `?${query}` : ''}`)
+export const getAdminOrder = (id) => request(`/admin/orders/${id}`)
+export const assignAdminRider = (id, riderId) => request(`/admin/orders/${id}/assign`, { method: 'PATCH', body: JSON.stringify({ riderId }) })
+export const autoAssignAdminRider = (id) => request(`/admin/orders/${id}/auto-assign`, { method: 'PATCH' })
+export const updateAdminOrderStatus = (id, status) => request(`/admin/orders/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) })
+export const resetAdminOrder = (id) => request(`/admin/orders/${id}/reset`, { method: 'PATCH' })
+export const deleteAdminOrder = (id) => request(`/admin/orders/${id}`, { method: 'DELETE' })
+export const cancelAdminOrder = (id) => request(`/admin/orders/${id}/cancel`, { method: 'PATCH' })
+export const createAdminUser = (payload) => request('/admin/users', { method: 'POST', body: JSON.stringify(payload) })
+export const deleteAdminUser = (id) => request(`/admin/users/${id}`, { method: 'DELETE' })
 
-  return data;
-}
-
-export async function login(payload) {
-  const data = await request("/auth/login", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-
-  if (data.accessToken) {
-    sessionStorage.setItem("swifty_access_token", data.accessToken);
-  }
-
-  const user = unwrap(data.user || data)
-  syncUserToStore(user)
-
-  return data;
-}
-
-export function logout() {
-  sessionStorage.removeItem("swifty_access_token");
-  setSession(null)
-}
-
-/* =========================
-   USER
-   ========================= */
-
-export async function getMe() {
-  const data = await request("/users/me");
-  const user = unwrap(data.user || data)
-  if (user && user.id) {
-    upsertUser(user)
-    setSession({ userId: user.id, role: user.role })
-  }
-  return user;
-}
-
-export async function updateMe(payload) {
-  const data = await request("/users/me", {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
-  const user = unwrap(data.user || data)
-  if (user && user.id) {
-    upsertUser(user)
-  }
-  return user;
-}
-
-/* =========================
-   ADDRESSES
-   ========================= */
-
-export async function getAddresses() {
-  return unwrap(await request("/addresses"));
-}
-
-export async function getAddress(id) {
-  return unwrap(await request(`/addresses/${id}`));
-}
-
-export async function createAddress(payload) {
-  return unwrap(await request("/addresses", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  }));
-}
-
-export async function updateAddress(id, payload) {
-  return unwrap(await request(`/addresses/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  }));
-}
-
-export async function deleteAddress(id) {
-  return unwrap(await request(`/addresses/${id}`, {
-    method: "DELETE",
-  }));
-}
-
-/* =========================
-   DELIVERIES
-   ========================= */
-
-export async function createDelivery(payload) {
-  const data = await request("/deliveries", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-  const delivery = unwrap(data.delivery || data)
-  if (delivery && delivery.trackingId) {
-    upsertDelivery(delivery)
-  }
-  return delivery;
-}
-
-export async function getDeliveries() {
-  const data = await request("/deliveries");
-  const deliveries = unwrap(data.deliveries || data)
-  syncDeliveriesToStore(deliveries)
-  return deliveries
-}
-
-export async function getDelivery(id) {
-  const data = await request(`/deliveries/${id}`);
-  const delivery = unwrap(data.delivery || data)
-  if (delivery && delivery.trackingId) {
-    upsertDelivery(delivery)
-  }
-  return delivery;
-}
-
-export async function cancelDelivery(id) {
-  const data = await request(`/deliveries/${id}/cancel`, {
-    method: "PATCH",
-  });
-  const delivery = unwrap(data.delivery || data)
-  if (delivery && delivery.trackingId) {
-    upsertDelivery(delivery)
-  }
-  return delivery;
-}
-
-/* =========================
-   TRACKING
-   ========================= */
-
-export async function getTracking(deliveryId) {
-  return unwrap(await request(`/tracking/${deliveryId}`));
-}
-
-/* =========================
-   RIDER
-   ========================= */
-
-export async function getRiderProfile() {
-  const data = await request("/riders/me");
-  const rider = unwrap(data.rider || data)
-  if (rider && rider.id) {
-    upsertUser(rider)
-  }
-  return rider;
-}
-
-export async function updateRiderProfile(payload) {
-  const data = await request("/riders/me", {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
-  const rider = unwrap(data.rider || data)
-  if (rider && rider.id) {
-    upsertUser(rider)
-  }
-  return rider;
-}
-
-/* =========================
-   RIDES
-   ========================= */
-
-export async function createRide(payload) {
-  const data = await request("/rides", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-  const ride = unwrap(data.ride || data)
-  if (ride && ride.id) {
-    upsertDelivery(ride)
-  }
-  return ride;
-}
-
-export async function getRides() {
-  const data = await request("/rides");
-  const rides = unwrap(data.rides || data)
-  syncDeliveriesToStore(rides)
-  return rides
-}
-
-export async function getRide(id) {
-  const data = await request(`/rides/${id}`);
-  const ride = unwrap(data.ride || data)
-  if (ride && ride.id) {
-    upsertDelivery(ride)
-  }
-  return ride;
-}
-
-export async function cancelRide(id) {
-  const data = await request(`/rides/${id}/cancel`, {
-    method: "PATCH",
-  });
-  const ride = unwrap(data.ride || data)
-  if (ride && ride.id) {
-    upsertDelivery(ride)
-  }
-  return ride;
-}
-
-export async function assignRide(deliveryId) {
-  const data = await request(`/riders/assign/${deliveryId}`, {
-    method: "POST",
-  });
-  const ride = unwrap(data.ride || data)
-  if (ride && ride.id) {
-    upsertDelivery(ride)
-  }
-  return ride;
-}
-
-export async function updateRiderDeliveryStatus(deliveryId, status) {
-  const data = await request(`/riders/deliveries/${deliveryId}/status`, {
-    method: "PATCH",
-    body: JSON.stringify({ status }),
-  });
-  const delivery = unwrap(data.delivery || data)
-  if (delivery && delivery.trackingId) {
-    upsertDelivery(delivery)
-  }
-  return delivery;
-}
-
-/* =========================
-   ADMIN
-   ========================= */
-
-export async function adminGetDashboard() {
-  const data = await request("/admin/dashboard");
-  return data.stats || data
-}
-
-export async function adminGetUsers(params = {}) {
-  const query = new URLSearchParams()
-  if (params.role) query.set("role", params.role)
-  if (params.search) query.set("search", params.search)
-  if (params.isActive !== undefined) query.set("isActive", String(params.isActive))
-  const qs = query.toString()
-  const data = await request(`/admin/users${qs ? `?${qs}` : ""}`)
-  const users = unwrap(data.users || data)
-  if (Array.isArray(users)) {
-    setUsers(users)
-  }
-  return users
-}
-
-export async function adminGetRiders(params = {}) {
-  const query = new URLSearchParams()
-  if (params.available !== undefined) query.set("available", String(params.available))
-  if (params.isActive !== undefined) query.set("isActive", String(params.isActive))
-  const qs = query.toString()
-  const data = await request(`/admin/riders${qs ? `?${qs}` : ""}`)
-  const riders = unwrap(data.riders || data)
-  if (Array.isArray(riders)) {
-    setUsers(riders)
-  }
-  return riders
-}
-
-export async function adminGetAvailableRiders() {
-  const data = await request("/admin/riders/available")
-  const riders = unwrap(data.riders || data)
-  if (Array.isArray(riders)) {
-    setUsers(riders)
-  }
-  return riders
-}
-
-export async function adminAssignRider(orderId, riderId) {
-  const data = await request(`/admin/orders/${orderId}/assign`, {
-    method: "PATCH",
-    body: JSON.stringify({ riderId }),
-  })
-  const order = unwrap(data.order || data)
-  if (order && order.id) {
-    upsertDelivery(order)
-  }
-  return order
-}
-
-export async function adminUpdateOrderStatus(orderId, status) {
-  const data = await request(`/admin/orders/${orderId}/status`, {
-    method: "PATCH",
-    body: JSON.stringify({ status }),
-  })
-  const order = unwrap(data.order || data)
-  if (order && order.id) {
-    upsertDelivery(order)
-  }
-  return order
-}
+export const getSupportTickets = (admin = false) => request(admin ? '/support/admin/all' : '/support')
+export const createSupportTicket = (payload) => request('/support', { method: 'POST', body: JSON.stringify(payload) })
+export const replySupportTicket = (id, content) => request(`/support/${id}/reply`, { method: 'PATCH', body: JSON.stringify({ content }) })
+export const updateSupportTicket = (id, status) => request(`/support/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) })

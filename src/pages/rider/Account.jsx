@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { ShimmerImage } from '@/components/shimmer-image'
 import {
   User,
   CreditCard,
@@ -26,8 +27,7 @@ import { AppShell } from '@/components/app-shell'
 import { BottomSheet } from '@/components/bottom-sheet'
 import { PageHeader } from '@/components/page-header'
 import { useRequireAuth } from '@/lib/use-require-auth'
-import { useStore, VEHICLE_TYPES } from '@/lib/mock-store'
-import { updateMe, logout as apiLogout } from '@/services/api'
+import { signOut, updateCurrentUser, changePassword, useStore, VEHICLE_TYPES } from '@/lib/api-store'
 import { readImageAsDataUrl } from '@/lib/image'
 
 const SECTIONS = [
@@ -57,7 +57,7 @@ export default function RiderAccount() {
   if (!accountUser) return null
 
   const handleLogout = () => {
-    apiLogout()
+    signOut()
     navigate('/auth')
   }
 
@@ -127,7 +127,7 @@ export default function RiderAccount() {
                 <div className="relative h-12 w-12 shrink-0">
                   <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-emerald-600 text-white">
                     {accountUser.avatarUrl ? (
-                      <img src={accountUser.avatarUrl} alt="" className="h-full w-full object-cover" />
+                      <ShimmerImage src={accountUser.avatarUrl} className="h-full w-full" imgClassName="h-full w-full object-cover" />
                     ) : (
                       <User className="h-6 w-6" />
                     )}
@@ -231,7 +231,15 @@ export default function RiderAccount() {
         description={activeModal === 'password' ? 'Set a new password for your account.' : activeModal === 'email' ? 'Use a new email address for updates.' : 'Choose how you want alerts delivered.'}
         footer={
           <button
-            onClick={closeModal}
+            onClick={async () => {
+              if (activeModal === 'password') {
+                try { await changePassword(password); setPassword(''); setSavedNotice('Password updated successfully.'); closeModal() }
+                catch (error) { setSavedNotice(error.message || 'Unable to update password.') }
+              } else if (activeModal === 'email') {
+                try { await updateCurrentUser({ email: email.trim() }); setSavedNotice('Email updated successfully.'); closeModal() }
+                catch (error) { setSavedNotice(error.message || 'Unable to update email.') }
+              } else closeModal()
+            }}
             className="w-full rounded-full bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-500"
           >
             {activeModal === 'password' ? 'Save password' : activeModal === 'email' ? 'Save email' : 'Confirm'}
@@ -280,7 +288,7 @@ function ProfilePanel({ user, onAvatarChange, onAvatarRemove, avatarError }) {
   const avatarInputRef = useRef(null)
 
   function saveProfile() {
-    updateMe({
+    updateCurrentUser({
       name: name.trim() || user.name,
       email: email.trim() || user.email,
       phone: phone.trim(),
@@ -295,7 +303,7 @@ function ProfilePanel({ user, onAvatarChange, onAvatarRemove, avatarError }) {
         <div className="relative shrink-0">
           <div className="flex h-28 w-24 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
             {user.avatarUrl ? (
-              <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+              <ShimmerImage src={user.avatarUrl} className="h-full w-full" imgClassName="h-full w-full object-cover" />
             ) : (
               <User className="h-10 w-10 text-slate-300" />
             )}

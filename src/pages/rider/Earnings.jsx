@@ -1,26 +1,14 @@
-import { useEffect, useState } from 'react'
 import { useRequireAuth } from '@/lib/use-require-auth'
-import { Wallet, Package, TrendingUp, LoaderCircle } from 'lucide-react'
+import { Wallet, Package, TrendingUp } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { PageHeader } from '@/components/page-header'
-import { useStore } from '@/lib/mock-store'
-import { getDeliveries } from '@/services/api'
+import { useStore } from '@/lib/api-store'
 
 export default function Earnings() {
   const user = useRequireAuth('rider')
-  const [loading, setLoading] = useState(true)
   const completed = useStore((s) =>
     user ? s.deliveries.filter((d) => d.riderId === user.id && d.status === 'delivered') : [],
   )
-  useEffect(() => {
-    if (!user) return undefined
-    let cancelled = false
-    setLoading(true)
-    getDeliveries().finally(() => {
-      if (!cancelled) setLoading(false)
-    })
-    return () => { cancelled = true }
-  }, [user?.id])
   if (!user) return null
 
   const total = completed.reduce((a, d) => a + d.price, 0)
@@ -31,18 +19,13 @@ export default function Earnings() {
       <main className="p-8 max-w-6xl mx-auto">
         <PageHeader title="Earnings" subtitle="Your completed deliveries and payouts." />
 
-        {loading ? (
-          <div className="flex items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white p-10 text-sm text-slate-500">
-            <LoaderCircle className="h-5 w-5 animate-spin" />
-            Loading your earnings...
-          </div>
-        ) : <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <StatCard label="Total earned" value={`₦${total}`} sub="all time" highlight Icon={Wallet} />
           <StatCard label="Deliveries" value={`${completed.length}`} sub="completed" Icon={Package} />
           <StatCard label="Avg per trip" value={`₦${avg}`} sub="payout" Icon={TrendingUp} />
-        </div>}
+        </div>
 
-        {!loading && <div className="mt-8 rounded-2xl border border-surface-200 bg-white shadow-sm overflow-hidden">
+        <div className="mt-8 rounded-2xl border border-surface-200 bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-surface-100 text-xs uppercase tracking-wider text-slate-500">
@@ -72,7 +55,7 @@ export default function Earnings() {
               </tbody>
             </table>
           </div>
-        </div>}
+        </div>
       </main>
     </AppShell>
   )

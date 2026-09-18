@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Users, Bike, CarFront, PackageCheck, LifeBuoy, LogOut, User } from 'lucide-react'
-import { getCurrentUser, signOut } from '../../lib/mock-store'
+import { useCurrentUser, signOut } from '../../lib/api-store'
 import { useAdminTheme, AdminThemeToggle } from './AdminThemeToggle'
 
 const ADMIN_LINKS = [
@@ -17,7 +17,7 @@ const ADMIN_LINKS = [
 export function AdminShell({ children }) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const user = getCurrentUser()
+  const { user } = useCurrentUser()
   const initials = user?.name?.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase() || 'SA'
   const rootRef = useRef(null)
   const { theme, setTheme } = useAdminTheme(rootRef)

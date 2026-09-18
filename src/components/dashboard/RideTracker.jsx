@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { CarFront, MapPin, Clock3, Navigation } from 'lucide-react'
-import { useStore } from '../../lib/mock-store'
+import { useStore } from '../../lib/api-store'
 import { DeliveryMap } from '../delivery-map'
 
 export function RideTracker() {

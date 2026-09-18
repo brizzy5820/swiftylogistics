@@ -2,30 +2,23 @@ import bcrypt from "bcrypt";
 import User from "../models/User.js";
 
 const seedAdmin = async () => {
-  const existingAdmin = await User.findOne({
-    role: "admin",
-  });
+  const email = (process.env.ADMIN_EMAIL || "admin@swifty.com").toLowerCase().trim();
+  const existingAdmin = await User.findOne({ role: "admin" });
+  if (existingAdmin) return;
 
-  if (existingAdmin) {
-    return;
-  }
-
-  const passwordHash = await bcrypt.hash(
-    "Admin@12345",
-    12
-  );
+  const password = process.env.ADMIN_PASSWORD || "Admin@12345";
+  const passwordHash = await bcrypt.hash(password, 12);
 
   await User.create({
-    name: "Swifty Admin",
-    email: "admin@swifty.com",
+    name: process.env.ADMIN_NAME || "Swifty Admin",
+    email,
     passwordHash,
     role: "admin",
+    department: "Operations",
     isActive: true,
   });
 
-  console.log(
-    "Default admin account created: admin@swifty.com"
-  );
+  console.log(`Default admin account created: ${email}`);
 };
 
 export default seedAdmin;

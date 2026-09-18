@@ -9,10 +9,18 @@ import riderRoutes from "./routes/rider.routes.js";
 import trackingRoutes from "./routes/tracking.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
+import supportRoutes from "./routes/support.routes.js";
 import rideRoutes from "./routes/ride.routes.js";
 const app = express();
 
-app.use(cors());
+const corsOptions = {
+  origin: "*", // allow every origin (universal)
+  methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: false,
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 
 app.get("/api/health", (req, res) => {
@@ -21,14 +29,9 @@ app.get("/api/health", (req, res) => {
     message: "Swifty API is running",
   });
 });
-app.get("/api/auth", (req,res)=>{
-  res.json({
-    success: true,
-    message:"Users will show here"
-  })
-})
 app.use("/api/auth", authRoutes);
 app.use("/api/riders", riderRoutes);
+app.use("/api/support", supportRoutes);
 app.use("/api/users",userRoutes)
 app.use("/api/addresses", addressRoutes);
 app.use("/api/deliveries", deliveryRoutes);

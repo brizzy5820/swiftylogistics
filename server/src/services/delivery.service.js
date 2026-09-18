@@ -3,6 +3,8 @@ import crypto from "crypto";
 import Delivery from "../models/Delivery.js";
 import Address from "../models/Address.js";
 import AppError from "../utils/AppError.js";
+import User from "../models/User.js";
+import { emitJobAvailable, emitOrderUpdate } from "../socket.js";
 
 const generateTrackingId = () => {
   return `TRK-${Date.now().toString(36).toUpperCase()}${crypto
@@ -200,6 +202,8 @@ const createDelivery = async (
     isScheduled,
   });
 
+  if (initialStatus === "pending") emitJobAvailable(delivery);
+
   return delivery;
 };
 
@@ -295,6 +299,12 @@ const cancelDelivery = async (
   );
 
   await delivery.save();
+
+  if (delivery.rider) {
+    await User.findByIdAndUpdate(delivery.rider, { isAvailable: true });
+  }
+
+  emitOrderUpdate(delivery);
 
   return delivery;
 };

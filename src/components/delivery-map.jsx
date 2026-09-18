@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { SkeletonMap } from '@/components/ui/skeleton'
+import { useDelayedLoading } from '@/lib/use-delayed-loading'
 
 export const API_KEY = import.meta.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY
 
@@ -53,7 +55,7 @@ function animateTo(marker, toLat, toLng, duration = 1400) {
   requestAnimationFrame(tick)
 }
 
-function haversineKm(a, b) {
+export function haversineKm(a, b) {
   if (!a || !b) return 0
   const R = 6371
   const dLat = ((b.lat - a.lat) * Math.PI) / 180
@@ -292,9 +294,14 @@ export function DeliveryMap({ pickup, dropoff, courier, courierInfo, destination
     }
   }, [courier, courierInfo, destination, dropoff])
 
+  const showMapSkeleton = useDelayedLoading(!mapReady && !error)
+
   return (
     <div className={className} style={{ position: 'relative' }}>
       <div ref={containerRef} className="absolute inset-0 lg:rounded-2xl overflow-hidden bg-surface-200" />
+      {showMapSkeleton && (
+        <SkeletonMap className="absolute inset-0 lg:rounded-2xl" />
+      )}
       {error === 'no-key' && (
         <div className="absolute inset-0 grid place-items-center bg-surface-200 rounded-2xl">
           <p className="text-sm text-slate-500">Add <code>VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSER_KEY</code> to <code>.env</code></p>

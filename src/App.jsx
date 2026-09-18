@@ -84,7 +84,7 @@ export default function App() {
           <Route path="/customer/notifications" element={<NotificationsPage />} />
           <Route path="/customer/history" element={<History />} />
           <Route path="/customer/track" element={<Track />} />
-          <Route path="/customer/track/:trackingId" element={<Track />} />
+          <Route path="/customer/track/:id" element={<Track />} />
           <Route path="/customer/account" element={<Account />} />
           <Route path="/customer/help" element={<Help />} />
           <Route path="/customer/actions" element={<Actions />} />

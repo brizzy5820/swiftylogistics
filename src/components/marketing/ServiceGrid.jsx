@@ -1,17 +1,17 @@
 import { ArrowUpRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { MOCK_SERVICES } from '../../data/mock-data'
+import { SERVICES } from '../../data/app-data'
 
 export function ServiceGrid() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {MOCK_SERVICES.map((service) => (
-        <Link key={service.id} to={service.href} className="group overflow-hidden rounded-3xl bg-white lg:shadow-sm lg:ring-1 lg:ring-slate-200/70 transition hover:-translate-y-1 hover:shadow-xl">
+      {SERVICES.map((service) => (
+        <Link key={service.id} to={service.href} className="group overflow-hidden rounded-3xl bg-white  lg:ring-1 lg:ring-slate-200/70 transition  hover:shadow-sm">
           <div className="relative h-auto  overflow-hidden bg-emerald-50">
             <img
               src={service.image}
               alt={service.title}
-              className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+              className="h-full w-full object-cover transition duration-500 group-hover:scale-109"
             />
             {/* <div className="absolute inset-0 bg-gradient-to-t from-slate-950/30 to-transparent" /> */}
           </div>

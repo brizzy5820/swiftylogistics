@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { ChevronRight, ChevronLeft } from 'lucide-react'
-import { getCurrentUser } from '@/lib/mock-store'
+import { ensureSession } from '@/lib/api-store'
 
 const SLIDES = [
   {
@@ -25,14 +25,16 @@ export default function Onboarding() {
   const [current, setCurrent] = useState(0)
 
   useEffect(() => {
-    const user = getCurrentUser()
-    if (user) {
-      navigate(user.role === 'rider' ? '/rider' : '/customer', { replace: true })
-      return
-    }
-    if (localStorage.getItem('swifty_onboarding_seen')) {
-      navigate('/auth', { replace: true })
-    }
+    let active = true
+    ensureSession().then((user) => {
+      if (!active) return
+      if (user) {
+        navigate(user.role === 'admin' ? '/admin' : user.role === 'rider' ? '/rider' : '/customer', { replace: true })
+        return
+      }
+      if (localStorage.getItem('swifty_onboarding_seen')) navigate('/auth', { replace: true })
+    })
+    return () => { active = false }
   }, [navigate])
 
   function finish() {

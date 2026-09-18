@@ -1,5 +1,4 @@
 import rideService from "../services/ride.services.js";
-import riderService from "../services/rider.services.js";
 
 const createRide = async (req, res) => {
   const ride = await rideService.createRide(
@@ -51,11 +50,9 @@ const cancelRide = async (req, res) => {
 };
 
 const assignRide = async (req, res) => {
-  const ride = await riderService.findAvailableRider(req.params.id);
-  if (!ride) {
-    return res.status(404).json({ success: false, message: "No available rider found" });
-  }
-  return res.status(200).json({ success: true, ride });
+  const ride = await rideService.assignRide(req.user._id, req.params.id);
+  if (!ride) return res.status(404).json({ success: false, message: "No available rider found" });
+  return res.status(200).json({ success: true, message: "Rider assigned successfully", ride });
 };
 
 export default {

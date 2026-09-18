@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Users, Bike, CarFront, PackageCheck, LifeBuoy, TrendingUp, Wallet, Activity, AlertTriangle, ChevronRight } from 'lucide-react'
 import { useRequireAdmin } from '../../lib/use-require-admin'
-import { useStore, STATUS_LABEL } from '../../lib/mock-store'
+import { useStore, STATUS_LABEL } from '../../lib/api-store'
 import { AdminShell } from '../../components/admin/AdminShell'
 import { DataTable, AdminModal, DetailRow, StatusPill } from '../../components/admin/DataTable'
 

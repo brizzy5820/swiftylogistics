@@ -1,7 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useMemo } from 'react'
 import { Bell, Calendar, CarFront, History, Briefcase,House, LayoutDashboard, LogOut, PackagePlus, Sparkles, User, Wallet, Plus } from 'lucide-react'
-import { getCurrentUser, signOut, useStore } from '../lib/mock-store'
+import { useCurrentUser, signOut, useStore } from '../lib/api-store'
 
 const CUSTOMER_LINKS = [
   { to: '/customer', label: 'Home', Icon: House },
@@ -25,8 +25,8 @@ const RIDER_LINKS = [
 export function AppShell({ children, hideMobileHeader = false }) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const { user, loading } = useCurrentUser()
   const session = useStore((s) => s.session)
-  const user = getCurrentUser()
   const role = session?.role || 'customer'
   const links = role === 'rider' ? RIDER_LINKS : CUSTOMER_LINKS
   const desktopLinks = role === 'rider' ? RIDER_LINKS : CUSTOMER_DESKTOP_LINKS

@@ -1,10 +1,9 @@
 import { Link, useNavigate } from 'react-router-dom'
-import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, ArrowLeft, Bell, Briefcase, CheckCircle2, Clock3, Truck, LoaderCircle } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { AlertCircle, ArrowLeft, Bell, Briefcase, CheckCircle2, Clock3, Truck } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
-import { useRequireAuth } from '@/lib/use-require-auth'
-import { useStore } from '@/lib/mock-store'
-import { getDeliveries } from '@/services/api'
+// import {} from '@/lib/use-require-auth'
+import { useStore,getCurrentUser  } from '@/lib/api-store'
 
 const NOTIFICATION_READ_KEY = 'swifty-notifications-read-at'
 
@@ -32,25 +31,14 @@ function isPaymentIncomplete(user) {
 
 export default function RiderNotifications() {
   const navigate = useNavigate()
-  const user = useRequireAuth('rider')
+  const user =getCurrentUser('rider')
   const [readAt, setReadAt] = useState(() => {
     if (typeof window === 'undefined') return 0
     return Number(window.localStorage.getItem(NOTIFICATION_READ_KEY)) || 0
   })
-  const [loading, setLoading] = useState(true)
   const deliveries = useStore((s) =>
     user ? s.deliveries.filter((d) => d.status === 'pending' || d.riderId === user.id) : [],
   )
-
-  useEffect(() => {
-    if (!user) return undefined
-    let cancelled = false
-    setLoading(true)
-    getDeliveries().finally(() => {
-      if (!cancelled) setLoading(false)
-    })
-    return () => { cancelled = true }
-  }, [user?.id])
 
   const notifications = useMemo(() => {
     if (!deliveries.length) return []
@@ -178,12 +166,7 @@ export default function RiderNotifications() {
           </Link>
         )}
 
-        {loading ? (
-          <div className="flex items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white p-10 text-sm text-slate-500 shadow-sm">
-            <LoaderCircle className="h-5 w-5 animate-spin" />
-            Loading your notifications...
-          </div>
-        ) : notifications.length === 0 ? (
+        {notifications.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
               <Bell className="h-6 w-6" />

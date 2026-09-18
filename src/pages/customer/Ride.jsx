@@ -1,21 +1,27 @@
 // pages/customer/ride.jsx (or wherever Ride.jsx lives)
 import { useCallback, useState, useEffect, useRef, useMemo } from 'react'
-import { ArrowLeft, CarFront, Check, Navigation, Users,User, Clock3, X, ArrowRight, Radio, MapPin, LoaderCircle } from 'lucide-react'
+import { ArrowLeft, CarFront, Check, Navigation, Users,User, Clock3, X, ArrowRight, Radio, MapPin, LoaderCircle, AlertCircle, RefreshCw, Plus, Minus, Wallet, CreditCard } from 'lucide-react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { AppShell } from '../../components/app-shell'
 import { DeliveryMap } from '../../components/delivery-map'
 import { MobileDrawer } from '../../components/mobile-drawer'
 import { useRequireAuth } from '../../lib/use-require-auth'
-import { updateDeliveryStatus, useStore } from '../../lib/mock-store'
-import { assignRide, createAddress, createRide  } from '@/services/api'
-import { MOCK_RIDE_OPTIONS } from '../../data/mock-data'
+import { assignAvailableRider, createRide, updateDeliveryStatus, useStore, emit } from '../../lib/api-store'
+import { getErrorMessage } from '../../services/api'
+import { RIDE_OPTIONS } from '../../data/app-data'
 import { ADDRESS_SUGGESTIONS, fetchLagosSuggestions, resolveAddressCoords, reverseGeocode } from '../../lib/address-suggestions'
+import { haversineKm } from '../../components/delivery-map'
 
 
 const LAGOS = { lat: 6.5244, lng: 3.3792 }
 
-function RiderSearchDrawer({ rider, noDriver, onCancel, onConfirm, onHeightChange }) {
+const SEARCH_TIMEOUT_MS = 60000
+const SEARCH_COUNTDOWN_MS = 60000
+
+function RiderSearchDrawer({ rider, onCancel, onConfirm, onHeightChange, onRetry, timedOut, countdown }) {
   const cardRef = useRef(null)
+
+  const progress = countdown ? countdown / (SEARCH_COUNTDOWN_MS / 1000) : 0
 
   const riderContent = rider ? (
     <div className="p-1">
@@ -35,16 +41,21 @@ function RiderSearchDrawer({ rider, noDriver, onCancel, onConfirm, onHeightChang
         <span className="text-sm font-bold text-amber-500">★ {rider.rating || '5.0'}</span>
       </div>
     </div>
-  ) : noDriver ? (
-    <div className="p-1">
-      <div className="flex items-start gap-3">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600">
-          <span className="text-3xl font-black">!</span>
-        </div>
-        <div>
-          <h2 className="font-display text-xl font-black uppercase text-slate-950">NO driver FOund at the moment</h2>
-          <p className="mt-1 text-sm text-slate-500">There are no active drivers available right now.</p>
-        </div>
+  ) : timedOut ? (
+    <div className="p-1 text-center">
+      <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+        <AlertCircle className="h-8 w-8" />
+      </div>
+      <h2 className="font-display text-xl font-black text-slate-950">No rider found</h2>
+      <p className="mt-1 text-sm text-slate-500">We couldn't find an available rider near you right now.</p>
+      <div className="mt-6">
+        <button
+          type="button"
+          onClick={onRetry}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-400"
+        >
+          <RefreshCw className="h-4 w-4" /> Try again
+        </button>
       </div>
     </div>
   ) : (
@@ -58,8 +69,17 @@ function RiderSearchDrawer({ rider, noDriver, onCancel, onConfirm, onHeightChang
           <p className="mt-1 text-sm text-slate-500">We are checking registered riders near your pickup.</p>
         </div>
       </div>
-      <div className="mt-5 h-1 overflow-hidden rounded-full bg-slate-100" aria-label="Searching for a rider">
-        <div className="h-full w-1/3 animate-[search-progress_1.4s_ease-in-out_infinite] rounded-full bg-emerald-500" />
+      <div className="mt-4">
+        <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+          <span>Searching for riders...</span>
+          <span className="font-mono text-semibold text-lg text-black">00:{countdown}s</span>
+        </div>
+        <div className="h-1 overflow-hidden rounded-full bg-slate-100" aria-label="Searching for a rider">
+          <div 
+            className="h-full bg-emerald-500 transition-all duration-1000 ease-linear" 
+            style={{ width: `${progress * 100}%` }}
+          />
+        </div>
       </div>
     </div>
   )
@@ -68,11 +88,7 @@ function RiderSearchDrawer({ rider, noDriver, onCancel, onConfirm, onHeightChang
     <button type="button" onClick={onConfirm} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-400">
       Confirm ride <ArrowRight className="h-4 w-4" />
     </button>
-  ) : noDriver ? (
-    <button type="button" onClick={onCancel} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
-      <X className="h-4 w-4" /> Close
-    </button>
-  ) : (
+  ) : timedOut ? null : (
     <button type="button" onClick={onCancel} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-200 py-3 text-sm font-bold text-red-600 transition hover:bg-red-50">
       <X className="h-4 w-4" /> Cancel search
     </button>
@@ -194,7 +210,7 @@ function LocationField({ variant, value, onChange, onCoords, placeholder }) {
     }
   }, [value])
 
-  function handleUseMyLocation() {
+  function useMyLocation() {
     if (!geoReady) return
     onCoords?.(geoCoordsRef.current)
     onChange(geoLabel)
@@ -244,7 +260,7 @@ function LocationField({ variant, value, onChange, onCoords, placeholder }) {
         ) : isPickup ? (
           <button
             type="button"
-            onMouseDown={(e) => { e.preventDefault(); handleUseMyLocation() }}
+            onMouseDown={(e) => { e.preventDefault(); useMyLocation() }}
             className="flex h-6 w-6 shrink-0 items-center justify-center text-slate-900 disabled:text-slate-300"
             disabled={!geoReady}
             aria-label="Use current location"
@@ -262,7 +278,7 @@ function LocationField({ variant, value, onChange, onCoords, placeholder }) {
           {geoReady && isPickup && (
             <button
               type="button"
-              onClick={handleUseMyLocation}
+              onClick={() => useMyLocation()}
               className="flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left hover:bg-emerald-50"
             >
               <Navigation className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
@@ -304,9 +320,16 @@ export default function Ride() {
   const [ridePick, setRidePick] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [isSearching, setIsSearching] = useState(false)
   const [searchingRideId, setSearchingRideId] = useState(null)
   const [matchedRider, setMatchedRider] = useState(null)
-  const [noDriver, setNoDriver] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
+  const [timedOut, setTimedOut] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState(null) // 'cash' | 'transfer'
+  const [customPrices, setCustomPrices] = useState({}) // { optionId: price }
+  const [searchCountdown, setSearchCountdown] = useState(SEARCH_COUNTDOWN_MS / 1000)
+
+  const store = useStore((s) => s)
 
   // How much of the screen a mobile bottom sheet is currently occupying
   // (real measured px, reported by MobileDrawer / RiderSearchDrawer). The
@@ -319,49 +342,137 @@ export default function Ride() {
     setSheetDragging(Boolean(dragging))
   }, [])
 
+  // Calculate dynamic prices based on distance
+  const distanceKm = useMemo(() => {
+    if (!pickupCoords || !dropoffCoords) return 0
+    return haversineKm(pickupCoords, dropoffCoords)
+  }, [pickupCoords, dropoffCoords])
+
+  const dynamicPrices = useMemo(() => {
+    const prices = {}
+    RIDE_OPTIONS.forEach((opt) => {
+      const baseDistancePrice = opt.pricePerKm * Math.max(1, Math.ceil(distanceKm))
+      const calculatedPrice = Math.round(opt.basePrice + baseDistancePrice)
+      prices[opt.id] = Math.min(Math.max(calculatedPrice, opt.minPrice), opt.maxPrice)
+    })
+    return prices
+  }, [distanceKm])
+
+  // Countdown timer for rider search
+  useEffect(() => {
+    if (!searchingRideId || timedOut || matchedRider) {
+      setSearchCountdown(SEARCH_COUNTDOWN_MS / 1000)
+      return
+    }
+
+    const timer = setInterval(() => {
+      setSearchCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [searchingRideId, timedOut, matchedRider])
+
   // Live, in-progress ride for this customer — drives the live map.
-  const activeRide = useStore((s) => {
-    if (!user) return null
-    return s.deliveries.find(
-      (d) => d.customerId === user.id && d.type === 'ride' && !['delivered', 'cancelled'].includes(d.status),
-    ) || null
-  })
+const [activeRide, setActiveRide] = useState(null)
+
   const liveCourier = activeRide?.courierPosition || null
   const livePickup = pickupCoords
   const liveDropoff = dropoffCoords
-  const liveRider = useStore((s) => activeRide?.riderId ? s.users.find((u) => u.id === activeRide.riderId) : null)
-  const liveCourierInfo = activeRide ? {
-    riderName: activeRide.riderName || 'Driver en route',
-    rideType: activeRide.rideType,
-    plateNumber: liveRider?.plateNumber,
-    phone: liveRider?.phone,
-  } : null
+const liveRider = activeRide?.rider || null
+ const liveCourierInfo = activeRide
+  ? {
+      riderName:
+        activeRide.rider?.name ||
+        activeRide.riderName ||
+        'Driver en route',
 
-  useEffect(() => {
-    if (!searchingRideId) return
-    let cancelled = false
-    let pollTimer
+      rideType:
+        activeRide.rideType,
 
-    const findRider = async () => {
-      if (cancelled) return
-      const matched = await assignRide(searchingRideId).catch(() => null)
-      if (cancelled) return
-      if (matched?.riderId) {
+      plateNumber:
+        activeRide.rider?.plateNumber,
+
+      phone:
+        activeRide.rider?.phone,
+    }
+  : null
+useEffect(() => {
+  if (!searchingRideId) return
+
+  let cancelled = false
+  let pollTimer
+  let timeoutTimer
+
+  const findRider = async () => {
+    if (cancelled) return
+
+    try {
+      const ride = await assignAvailableRider(searchingRideId)
+
+      if (ride?.rider) {
+        if (cancelled) return
+
+        setActiveRide(ride)
+        setMatchedRider(ride)
         setSearchingRideId(null)
-        setMatchedRider(matched)
+        setTimedOut(false)
+
         return
       }
-      setNoDriver(true)
-      setSearchingRideId(null)
+    } catch (error) {
+      /*
+       * 404 simply means no rider is available yet.
+       * Keep searching.
+       */
+      if (error.status !== 404) {
+        console.error(
+          'Rider assignment failed:',
+          error
+        )
+      }
     }
 
-    const startTimer = window.setTimeout(findRider, 3000)
-    return () => {
-      cancelled = true
-      window.clearTimeout(startTimer)
-      window.clearTimeout(pollTimer)
+    pollTimer = window.setTimeout(
+      findRider,
+      3000
+    )
+  }
+
+  // Start the initial search after a short delay
+  const startTimer =
+    window.setTimeout(
+      findRider,
+      3000
+    )
+
+  // Set timeout timer for 20 seconds
+  timeoutTimer = window.setTimeout(() => {
+    if (!cancelled && searchingRideId) {
+      setTimedOut(true)
+      // Update the delivery in store with timedOut flag
+      const delivery = store.deliveries.find((d) => d.id === searchingRideId)
+      if (delivery) {
+        store.deliveries = store.deliveries.map((d) => 
+          d.id === searchingRideId ? { ...d, timedOut: true } : d
+        )
+        store.emit()
+      }
     }
-  }, [searchingRideId, navigate])
+  }, SEARCH_TIMEOUT_MS)
+
+  return () => {
+    cancelled = true
+    window.clearTimeout(startTimer)
+    window.clearTimeout(pollTimer)
+    window.clearTimeout(timeoutTimer)
+  }
+}, [searchingRideId])
   // Keep the map markers in sync with whatever the user types.
   const t1 = useRef(null)
   useEffect(() => {
@@ -385,68 +496,163 @@ export default function Ride() {
 
   if (!user) return null
 
-  async function confirmRide() {
-    setLoading(true)
+async function confirmRide() {
+  if (!option) return
+  if (!paymentMethod) {
+    setErrorMessage('Please select a payment method')
+    return
+  }
+
+  setLoading(true)
+  setIsSearching(true)
+  setErrorMessage('')
+
+  try {
+    
+    const customPrice = customPrices[option.id]
+    
+    const ride = await createRide({
+      pickup: {
+        address:
+          pickup || 'My location',
+
+        coords:
+          pickupCoords || LAGOS,
+      },
+
+      dropoff: {
+        address: dropoff,
+
+        coords:
+          dropoffCoords || LAGOS,
+      },
+
+      rideType: option.id,
+      paymentMethod,
+      customPrice,
+    })
+
+    setActiveRide(ride)
+
+    setShowModal(false)
+    setRidePick(false)
+
+    setSearchingRideId(
+      ride._id || ride.id
+    )
+  }
+   catch (error) {
+    console.error(
+      'Failed to create ride:',
+      error )
+
+    setErrorMessage(getErrorMessage(error, 'Unable to create ride. Please check your pickup and destination.'))
+  } finally {
+    setLoading(false)
+    setIsSearching(false)
+  }
+}
+async function cancelRiderSearch() {
+  const rideId =
+    searchingRideId ||
+    matchedRider?._id ||
+    matchedRider?.id
+
+  if (rideId) {
     try {
-      const [pickupAddress, dropoffAddress] = await Promise.all([
-        createAddress({ label: 'Ride pickup', addressLine: pickup || 'My location', city: 'Lagos', state: 'Lagos', coordinates: { latitude: pickupCoords?.lat ?? LAGOS.lat, longitude: pickupCoords?.lng ?? LAGOS.lng } }),
-        createAddress({ label: 'Ride drop-off', addressLine: dropoff, city: 'Lagos', state: 'Lagos', coordinates: { latitude: dropoffCoords?.lat ?? LAGOS.lat, longitude: dropoffCoords?.lng ?? LAGOS.lng } }),
-      ])
-      const order = await createRide({
-        pickupAddress: pickupAddress._id || pickupAddress.id,
-        dropoffAddress: dropoffAddress._id || dropoffAddress.id,
-        rideType: option.id,
-      })
-      setShowModal(false)
-      setNoDriver(false)
-      setSearchingRideId(order.id)
+      const ride = await updateDeliveryStatus(rideId, 'cancelled')
+      setActiveRide(ride || null)
     } catch (error) {
-      window.alert(error.message || 'Unable to start the ride.')
-    } finally {
-      setLoading(false)
+      console.error('Failed to cancel ride:', error)
+      setErrorMessage(getErrorMessage(error, 'Unable to cancel ride search.'))
     }
   }
 
-  function cancelRiderSearch() {
-    const rideId = searchingRideId || matchedRider?.id
-    if (rideId) updateDeliveryStatus(rideId, 'cancelled')
-    setSearchingRideId(null)
-    setMatchedRider(null)
-    setNoDriver(false)
-  }
-  function cancelRidePick() {
+  setSearchingRideId(null)
+  setMatchedRider(null)
+  setTimedOut(false)
+  setIsSearching(false)
+}
 
+function handleRetrySearch() {
+  setTimedOut(false)
+  setIsSearching(true)
+  // Restart the search by re-setting the searchingRideId
+  // We need to re-create the ride or restart the search
+  if (matchedRider?._id || matchedRider?.id) {
+    setSearchingRideId(matchedRider._id || matchedRider.id)
   }
-  function confirmMatchedRide() {
+}
+
+function confirmMatchedRide() {
     if (!matchedRider) return
-    navigate(`/customer/track/${matchedRider.id}`)
+    navigate(`/customer/track/${matchedRider.id || matchedRider._id}`)
     setMatchedRider(null)
+  }
+
+  const getPriceForOption = (optionId) => {
+    const customPrice = customPrices[optionId]
+    if (customPrice) return customPrice
+    return dynamicPrices[optionId] || RIDE_OPTIONS.find(o => o.id === optionId)?.basePrice || 0
+  }
+
+  const handlePriceChange = (optionId, delta) => {
+    const optionData = RIDE_OPTIONS.find(o => o.id === optionId)
+    if (!optionData) return
+    
+    const currentPrice = getPriceForOption(optionId)
+    const newPrice = Math.min(Math.max(currentPrice + delta * 100, optionData.minPrice), optionData.maxPrice)
+    setCustomPrices(prev => ({ ...prev, [optionId]: newPrice }))
   }
 
   const rideOptions = (
     <div className="space-y-3">
-      {MOCK_RIDE_OPTIONS.map((item) => (
-        <button
-          key={item.id}
-          onClick={() => setOption(item)}
-          className={`flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition ${
-            option?.id === item.id ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500/10' : 'border-slate-200 bg-white hover:bg-slate-50'
-          }`}
-        >
-          <span className="flex h-12 w-14 shrink-0 items-center justify-center rounded-xl"><img src={item.href} className="h-full w-full" alt="" /></span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-sm font-bold">{item.name}</span>
-            <span className="mt-1 flex items-center gap-3 text-xs text-slate-500">
-              <span className="flex items-center gap-1"><Clock3 className="h-3 w-3" /> {item.eta} min</span>
-              <span className="flex items-center gap-1"><Users className="h-3 w-3" /> {item.seats}</span>
+      {RIDE_OPTIONS.map((item) => {
+        const currentPrice = getPriceForOption(item.id)
+        const isSelected = option?.id === item.id
+        return (
+          <button
+            key={item.id}
+            onClick={() => setOption(item)}
+            className={`flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition ${
+              isSelected ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500/10' : 'border-slate-200 bg-white hover:bg-slate-50'
+            }`}
+          >
+            <span className="flex h-12 w-14 shrink-0 items-center justify-center rounded-xl"><img src={item.href} className="h-full w-full" alt="" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-bold">{item.name}</span>
+              <span className="mt-1 flex items-center gap-3 text-xs text-slate-500">
+                <span className="flex items-center gap-1"><Clock3 className="h-3 w-3" /> {item.eta} min</span>
+                <span className="flex items-center gap-1"><Users className="h-3 w-3" /> {item.seats}</span>
+              </span>
             </span>
-          </span>
-          <span className="text-right">
-            <span className="block font-bold">₦{item.price.toLocaleString()}</span>
-            {option?.id === item.id && <Check className="ml-auto mt-1 h-4 w-4 text-emerald-600" />}
-          </span>
-        </button>
-      ))}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-slate-100 rounded-xl px-3 py-2">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); handlePriceChange(item.id, -1) }}
+                  disabled={currentPrice <= item.minPrice}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-200 transition"
+                  aria-label="Decrease price"
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
+                <span className="w-16 text-center font-bold text-slate-900">₦{currentPrice.toLocaleString()}</span>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); handlePriceChange(item.id, 1) }}
+                  disabled={currentPrice >= item.maxPrice}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-200 transition"
+                  aria-label="Increase price"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+              {isSelected && <Check className="mt-1 h-4 w-4 text-emerald-600" />}
+            </div>
+          </button>
+        )
+      })}
     </div>
   )
 
@@ -471,17 +677,22 @@ export default function Ride() {
 
           <button
             type="button"
-            onClick={() => { setShowModal(true); setRidePick(true) }}
+            onClick={() => { setErrorMessage(''); setShowModal(true); setRidePick(true) }}
             disabled={!dropoff.trim()}
             className="flex items-center gap-2 mt-4 rounded-xl bg-emerald-600 py-2.5 px-6 text-sm font-bold text-white shadow-lg shadow-sm transition hover:bg-emerald-400 disabled:opacity-50"
           >
             See prices
             <ArrowRight className="h-4 w-4" />
           </button>
+          {errorMessage && (
+            <p className="mt-4 whitespace-pre-line rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+              {errorMessage}
+            </p>
+          )}
         </section>
 
         {/* Right: live map, fixed height like Book.jsx */}
-        <section className="relative order-last hidden h-[38vh] min-h-[280px] overflow-hidden rounded-3xl border border-slate-200 lg:order-none lg:block lg:h-[520px]">
+        <section className="relative order-last hidden h-[38vh] min-h-[280px] overflow-hidden rounded-3xl border border-slate-200 lg:order-none lg:block lg:h-[560px]">
           {activeRide && (
             <div className="absolute left-3 top-3 z-10 flex items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-[11px] font-bold text-emerald-700 shadow-sm backdrop-blur">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -502,7 +713,7 @@ export default function Ride() {
       {/* Mobile confirmation: a single persistent map, pushed up by whichever
           sheet is currently open, so pickup/dropoff markers stay visible
           and never end up hidden behind the sheet. */}
-      {(showModal || searchingRideId || matchedRider || noDriver) && (
+      {(showModal || searchingRideId || matchedRider) && (
         <>
           <div
             className={`fixed inset-x-0 top-0 z-100 lg:hidden ${sheetDragging ? '' : 'transition-[bottom] duration-200 ease-out'}`}
@@ -525,7 +736,7 @@ export default function Ride() {
               footer={(
                 <button
                   onClick={() => { setRidePick(false); confirmRide() }}
-                  disabled={loading || !option}
+                  disabled={loading || !option || !paymentMethod}
                   className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-400 disabled:opacity-60"
                 >
                   {loading ? 'Starting search…' : 'Find a rider'} <ArrowRight className="h-4 w-4" />
@@ -540,6 +751,46 @@ export default function Ride() {
                 <button onClick={() => setShowModal(false)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200" aria-label="Close">
                   <X className="h-4 w-4" />
                 </button>
+              </div>
+              {errorMessage && (
+                <p className="mb-4 whitespace-pre-line rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">
+                  {errorMessage}
+                </p>
+              )}
+              {/* Payment Method Selection */}
+              <div className="mb-4">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Payment Method</p>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('cash')}
+                    className={`flex-1 flex items-center justify-center gap-2 rounded-xl border-2 p-3 transition ${
+                      paymentMethod === 'cash'
+                        ? 'border-emerald-500 bg-emerald-50'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <Wallet className="h-5 w-5 text-slate-600" />
+                    <span className="text-sm font-semibold text-slate-700">Cash</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('transfer')}
+                    className={`flex-1 flex items-center justify-center gap-2 rounded-xl border-2 p-3 transition ${
+                      paymentMethod === 'transfer'
+                        ? 'border-emerald-500 bg-emerald-50'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <CreditCard className="h-5 w-5 text-slate-600" />
+                    <span className="text-sm font-semibold text-slate-700">Transfer</span>
+                  </button>
+                </div>
+                {!paymentMethod && (
+                  <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" /> Select payment option
+                  </p>
+                )}
               </div>
               {rideOptions}
             </MobileDrawer>
@@ -556,10 +807,50 @@ export default function Ride() {
                   </button>
                 </div>
                 <p className="mb-4 text-sm text-slate-500">{pickup || 'My location'} → {dropoff}</p>
+                {errorMessage && (
+                  <p className="mb-4 whitespace-pre-line rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">
+                    {errorMessage}
+                  </p>
+                )}
+                {/* Payment Method Selection */}
+                <div className="mb-4">
+                  <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Payment Method</p>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('cash')}
+                      className={`flex-1 flex items-center justify-center gap-2 rounded-xl border-2 p-3 transition ${
+                        paymentMethod === 'cash'
+                          ? 'border-emerald-500 bg-emerald-50'
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <Wallet className="h-5 w-5 text-slate-600" />
+                      <span className="text-sm font-semibold text-slate-700">Cash</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('transfer')}
+                      className={`flex-1 flex items-center justify-center gap-2 rounded-xl border-2 p-3 transition ${
+                        paymentMethod === 'transfer'
+                          ? 'border-emerald-500 bg-emerald-50'
+                          : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                    >
+                      <CreditCard className="h-5 w-5 text-slate-600" />
+                      <span className="text-sm font-semibold text-slate-700">Transfer</span>
+                    </button>
+                  </div>
+                  {!paymentMethod && (
+                    <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" /> Select payment option
+                    </p>
+                  )}
+                </div>
                 {rideOptions}
                 <button
                   onClick={() => { setRidePick(false); confirmRide() }}
-                  disabled={loading || !option}
+                  disabled={loading || !option || !paymentMethod}
                   className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-400 disabled:opacity-60"
                 >
                   {loading ? 'Starting search…' : 'Find a rider'} <ArrowRight className="h-4 w-4" />
@@ -569,13 +860,15 @@ export default function Ride() {
           )}
         </>
       )}
-      {(searchingRideId || matchedRider || noDriver) && (
+      {(searchingRideId || matchedRider || isSearching) && (
         <RiderSearchDrawer
           rider={matchedRider ? liveRider || { name: matchedRider.riderName } : null}
-          noDriver={noDriver}
           onCancel={cancelRiderSearch}
           onConfirm={confirmMatchedRide}
           onHeightChange={handleSheetHeightChange}
+          onRetry={handleRetrySearch}
+          timedOut={timedOut}
+          countdown={searchCountdown}
         />
       )}
     </AppShell>

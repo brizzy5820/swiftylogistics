@@ -5,10 +5,9 @@ import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell'
 import { TripCard } from '@/components/trip-card'
 import { useRequireAuth } from '@/lib/use-require-auth'
-import { useStore, updateDeliveryStatus } from '@/lib/mock-store'
+import { useStore, updateDeliveryStatus } from '@/lib/api-store'
 import { RiderMap } from '@/components/rider-map'
-import { updateRiderDeliveryStatus } from '@/services/api'
-import { getDeliveries } from '@/services/api'
+import { getErrorMessage } from '@/services/api'
 
 const MAP_COLLAPSED = 36
 const MAP_DEFAULT = 260
@@ -177,6 +176,7 @@ export default function RiderDashboard() {
   const [mapHeight, setMapHeight] = useState(MAP_COLLAPSED)
   const [showMap, setShowMap] = useState(false)
   const [paymentDismissed, setPaymentDismissed] = useState(false)
+  const [dismissedRequests, setDismissedRequests] = useState(() => new Set())
   const [loading, setLoading] = useState(true)
   
   // Desktop resizable sidebar
@@ -184,7 +184,8 @@ export default function RiderDashboard() {
   const [isResizing, setIsResizing] = useState(false)
   const resizeStartRef = useRef({ x: 0, width: SIDEBAR_DEFAULT })
 
-  const incoming = useStore((s) => s.deliveries.filter((d) => d.status === 'pending' && (!d.riderId || d.riderId === user?.id)))
+  const availableRequests = useStore((s) => s.deliveries.filter((d) => d.status === 'pending' && (!d.riderId || d.riderId === user?.id)))
+  const incoming = availableRequests.filter((d) => !dismissedRequests.has(d.id))
   const myJobs = useStore((s) =>
     user ? s.deliveries.filter((d) => d.riderId === user.id && d.status !== 'delivered' && d.status !== 'cancelled') : [],
   )
@@ -201,24 +202,32 @@ export default function RiderDashboard() {
 
   useEffect(() => {
     if (!user) return undefined
-    let cancelled = false
     setLoading(true)
-    getDeliveries().finally(() => {
-      if (!cancelled) setLoading(false)
-    })
-    return () => { cancelled = true }
+    const timer = window.setTimeout(() => setLoading(false), 250)
+    return () => window.clearTimeout(timer)
   }, [user?.id])
 
-  function accept(id) {
-    updateRiderDeliveryStatus(id, 'accepted').catch(() => {
-      updateDeliveryStatus(id, 'accepted', user.id, user.name)
-    })
+  async function accept(id) {
+    try {
+      await updateDeliveryStatus(id, 'accepted')
+      setDismissedRequests((current) => {
+        const next = new Set(current)
+        next.delete(id)
+        return next
+      })
+      toast.success('Job accepted')
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Unable to accept this job.'))
+    }
   }
 
   function reject(id) {
-    updateRiderDeliveryStatus(id, 'cancelled').catch(() => {
-      updateDeliveryStatus(id, 'cancelled')
+    setDismissedRequests((current) => {
+      const next = new Set(current)
+      next.add(id)
+      return next
     })
+    toast.message('Request hidden from your list')
   }
 
   // Mobile: toggle map visibility

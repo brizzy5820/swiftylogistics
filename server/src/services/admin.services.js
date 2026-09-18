@@ -1,6 +1,10 @@
 import User from "../models/User.js";
 import Delivery from "../models/Delivery.js";
 import AppError from "../utils/AppError.js";
+import Address from "../models/Address.js";
+import Notification from "../models/Notification.js";
+import SupportTicket from "../models/SupportTicket.js";
+import { emitOrderUpdate, emitJobAssigned } from "../socket.js";
 
 const getDashboardStats = async () => {
   const [
@@ -200,15 +204,8 @@ const updateUser = async (
   updates,
   adminId
 ) => {
-  if (
-    userId.toString() ===
-    adminId.toString() &&
-    updates.isActive === false
-  ) {
-    throw new AppError(
-      "You cannot deactivate your own account",
-      400
-    );
+  if (userId.toString() === adminId.toString() && (updates.isActive === false || updates.role)) {
+    throw new AppError("You cannot deactivate or change the role of your own account", 400);
   }
 
   const user =
@@ -479,10 +476,15 @@ const assignRider = async (
 
   await order.save();
 
-  return order.populate(
+  await order.populate(
     "rider",
     "name phone vehicleType vehicleColor plateNumber rating isAvailable"
   );
+
+  emitOrderUpdate(order);
+  emitJobAssigned(order);
+
+  return order;
 };
 
 const autoAssignRider = async (
@@ -636,6 +638,8 @@ const updateOrderStatus = async (
 
   await order.save();
 
+  emitOrderUpdate(order);
+
   return order;
 };
 
@@ -666,6 +670,61 @@ const getRecentOrders = async (
     .limit(Number(limit));
 };
 
+
+const createUser = async (data) => {
+  const { name, email, password, phone, role = "customer", department, ...details } = data;
+  const normalizedEmail = email.toLowerCase().trim();
+  if (await User.findOne({ email: normalizedEmail })) throw new AppError("An account with this email already exists", 409);
+  const bcrypt = (await import("bcrypt")).default;
+  const passwordHash = await bcrypt.hash(password, 12);
+  const user = await User.create({ name, email: normalizedEmail, passwordHash, phone, role, department, ...details });
+  return User.findById(user._id).select("-passwordHash");
+};
+
+const deleteUser = async (userId, adminId) => {
+  if (String(userId) === String(adminId)) throw new AppError("You cannot delete your own account", 400);
+  const user = await User.findByIdAndDelete(userId);
+  if (!user) throw new AppError("User not found", 404);
+  await Promise.all([
+    Address.deleteMany({ user: userId }),
+    Notification.deleteMany({ user: userId }),
+    SupportTicket.deleteMany({ customer: userId }),
+    Delivery.deleteMany({ $or: [{ customer: userId }, { rider: userId }] }),
+  ]);
+  return user;
+};
+
+
+const setUserPassword = async (userId, password) => {
+  if (!password || password.length < 8) throw new AppError("Password must be at least 8 characters", 400);
+  const bcrypt = (await import("bcrypt")).default;
+  const passwordHash = await bcrypt.hash(password, 12);
+  const user = await User.findByIdAndUpdate(userId, { passwordHash }, { new: true }).select("-passwordHash");
+  if (!user) throw new AppError("User not found", 404);
+  return user;
+};
+
+const deleteOrder = async (orderId) => {
+  const order = await Delivery.findByIdAndDelete(orderId);
+  if (!order) throw new AppError("Order not found", 404);
+  if (order.rider) await User.findByIdAndUpdate(order.rider, { isAvailable: true });
+  emitOrderUpdate({ ...order.toObject(), status: "cancelled" });
+  return order;
+};
+
+const resetOrder = async (orderId) => {
+  const order = await Delivery.findById(orderId);
+  if (!order) throw new AppError("Order not found", 404);
+  if (order.status === "delivered") throw new AppError("Delivered orders cannot be reset", 400);
+  if (order.rider) await User.findByIdAndUpdate(order.rider, { isAvailable: true });
+  order.rider = null; order.riderName = null; order.status = "pending"; order.isScheduled = false; order.courierPosition = order.pickup.coords;
+  if (!order.statusTimestamps) order.statusTimestamps = new Map();
+  order.statusTimestamps.set("pending", new Date());
+  await order.save();
+  emitOrderUpdate(order);
+  return order;
+};
+
 export default {
   getDashboardStats,
 
@@ -674,6 +733,9 @@ export default {
   updateUser,
   updateUserRole,
   updateUserStatus,
+  createUser,
+  deleteUser,
+  setUserPassword,
 
   getRiders,
   getRiderById,
@@ -687,4 +749,6 @@ export default {
   autoAssignRider,
   updateOrderStatus,
   cancelOrder,
+  deleteOrder,
+  resetOrder,
 };

@@ -1,47 +1,25 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getCurrentUser } from './mock-store'
-import { getMe } from '@/services/api'
+import { ensureSession } from './api-store'
 
 export function useRequireAdmin() {
   const navigate = useNavigate()
-  const [user, setUser] = useState(() => getCurrentUser())
-  const [checking, setChecking] = useState(() => Boolean(sessionStorage.getItem('swifty_access_token')))
+  const [user, setUser] = useState(null)
+  const [checking, setChecking] = useState(true)
 
   useEffect(() => {
-    let cancelled = false
-    const token = sessionStorage.getItem('swifty_access_token')
+    let active = true
+    ensureSession().then((currentUser) => {
+      if (!active) return
+      if (!currentUser || currentUser.role !== 'admin') {
+        navigate('/auth', { replace: true, state: { from: '/admin' } })
+        return
+      }
+      setUser(currentUser)
+      setChecking(false)
+    }).catch(() => { if (active) navigate('/auth', { replace: true }) })
+    return () => { active = false }
+  }, [navigate])
 
-    if (token) {
-      setChecking(true)
-      getMe()
-        .then((serverUser) => {
-          if (!cancelled) setUser(serverUser)
-        })
-        .catch(() => {
-          if (cancelled) return
-          sessionStorage.removeItem('swifty_access_token')
-          setUser(null)
-          navigate('/auth', { replace: true, state: { from: '/admin' } })
-        })
-        .finally(() => {
-          if (!cancelled) setChecking(false)
-        })
-      return
-    }
-
-    if (!user || user.role !== 'admin') {
-      navigate('/auth', { replace: true, state: { from: '/admin' } })
-    }
-  }, [user, navigate])
-
-  if (checking) {
-    return React.createElement(
-      'div',
-      { className: 'flex min-h-screen items-center justify-center bg-slate-50 text-sm font-semibold text-slate-500' },
-      'Loading your Swifty account...',
-    )
-  }
-  if (!user || user.role !== 'admin') return null
-  return user
+  return checking ? null : user
 }

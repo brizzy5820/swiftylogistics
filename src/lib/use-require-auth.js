@@ -1,66 +1,43 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { getCurrentUser } from './mock-store'
-import { getMe } from '@/services/api'
+import { ensureSession, useStore } from './api-store'
 
 export function useRequireAuth(requiredRole) {
   const navigate = useNavigate()
   const location = useLocation()
-  const [user, setUser] = useState(() => getCurrentUser())
-  const [checking, setChecking] = useState(() => Boolean(sessionStorage.getItem('swifty_access_token')))
+  const [user, setUser] = useState(null)
+  const [checking, setChecking] = useState(true)
+  const session = useStore((s) => s.session)
+  const loading = useStore((s) => s.loading)
 
   useEffect(() => {
-    let cancelled = false
-    const token = sessionStorage.getItem('swifty_access_token')
-
-    if (token) {
-      setChecking(true)
-      getMe()
-        .then((serverUser) => {
-          if (cancelled) return
-          if (requiredRole && serverUser.role !== requiredRole) {
-            navigate(serverUser.role === 'rider' ? '/rider' : serverUser.role === 'admin' ? '/admin' : '/customer', { replace: true })
-            return
-          }
-          setUser(serverUser)
-        })
-        .catch(() => {
-          if (cancelled) return
-          sessionStorage.removeItem('swifty_access_token')
-          setUser(null)
-          navigate('/auth', { replace: true, state: { from: location.pathname + location.search, role: requiredRole } })
-        })
-        .finally(() => {
-          if (!cancelled) setChecking(false)
-        })
-      return
+    let active = true
+    
+    const checkAuth = async () => {
+      if (loading && !session) {
+        // Wait for hydration to complete
+        return
+      }
+      
+      const currentUser = await ensureSession()
+      if (!active) return
+      
+      if (!currentUser) {
+        navigate('/auth', { replace: true, state: { from: location.pathname + location.search, intent: location.state ?? null, role: requiredRole } })
+        return
+      }
+      if (requiredRole && currentUser.role !== requiredRole) {
+        navigate(currentUser.role === 'admin' ? '/admin' : currentUser.role === 'rider' ? '/rider' : '/customer', { replace: true })
+        return
+      }
+      setUser(currentUser)
+      setChecking(false)
     }
+    
+    checkAuth()
+    
+    return () => { active = false }
+  }, [navigate, requiredRole, location.pathname, session, loading])
 
-    const u = getCurrentUser()
-    if (!u) {
-      navigate('/auth', {
-        replace: true,
-        state: {
-          from: location.pathname + location.search,
-          intent: location.state ?? null,
-          role: requiredRole,
-        },
-      })
-      return
-    }
-    if (requiredRole && u.role !== requiredRole) {
-      navigate(u.role === 'rider' ? '/rider' : u.role === 'admin' ? '/admin' : '/customer', { replace: true })
-      return
-    }
-    setUser(u)
-  }, [navigate, requiredRole, location])
-
-  if (checking) {
-    return React.createElement(
-      'div',
-      { className: 'flex min-h-screen items-center justify-center bg-slate-50 text-sm font-semibold text-slate-500' },
-      'Loading your Swifty account...',
-    )
-  }
-  return user
+  return checking ? null : user
 }
