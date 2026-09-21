@@ -101,8 +101,8 @@ export function MobileDrawer({ children, footer, banner, onClose, onHeightChange
       {banner && <div className="pointer-events-none absolute inset-x-0 bottom-[30vh] z-10 mx-4">{banner}</div>}
       <div
         ref={sheetRef}
-        style={{ height: `${heightVh}vh`, transition: dragging ? 'none' : 'height 0.28s cubic-bezier(0.32, 0.72, 0, 1)' }}
-        className="absolute inset-x-0 bottom-0 flex flex-col rounded-t-3xl bg-white shadow-2xl"
+        style={{ height: `${heightVh}vh`, transition: dragging ? 'none' : 'height 0.28s cubic-bezier(0.32, 0.72, 0, 1)', borderRadius: '1.5rem 1.5rem 0 0' }}
+        className="absolute inset-x-0 bottom-0 flex flex-col bg-white shadow-2xl"
       >
         <div className="flex shrink-0 touch-none items-center justify-center px-4 pb-2 pt-3">
           <div onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp} className="flex h-8 w-full cursor-grab items-center justify-center active:cursor-grabbing">

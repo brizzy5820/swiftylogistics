@@ -13,6 +13,7 @@ import {
   Smartphone,
   X,
 } from "lucide-react";
+import { useCurrentUser } from "../lib/api-store";
 import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "../components/ui/sheet";
@@ -181,6 +182,7 @@ function LocationField({ variant, value, onChange, onCoords, placeholder }) {
 
 export default function Index() {
   const navigate = useNavigate();
+  const { user } = useCurrentUser();
   const { scrollY } = useScroll();
   const heroY = useTransform(scrollY, [0, 700], ["0%", "22%"]);
   const [scrolled, setScrolled] = useState(false);
@@ -195,15 +197,23 @@ export default function Index() {
 
   function handleRide(e) {
     e.preventDefault();
+    if (!user) {
+      navigate("/auth", { state: { from: "/customer/ride", intent: { pickup, dropoff, pickupCoords, dropoffCoords, role: "customer" } } });
+      return;
+    }
     const pc = pickupCoords ?? resolveAddressCoords(pickup, null);
     const dc = dropoffCoords ?? resolveAddressCoords(dropoff, null);
-    navigate("/customer/ride", { state: { pickup, dropoff, pickupCoords: pc, dropoffCoords: dc } });
+    navigate({ pathname: '/customer/ride', state: { pickup, dropoff, pickupCoords: pc, dropoffCoords: dc } });
   }
 
   function handleTrack(e) {
     e.preventDefault();
     const code = trackCode.trim();
     if (!code) return;
+    if (!user) {
+      navigate("/auth", { state: { from: `/customer/track/${encodeURIComponent(code)}`, intent: { trackingId: code }, role: "customer" } });
+      return;
+    }
     navigate(`/customer/track/${encodeURIComponent(code)}`);
   }
 
@@ -228,7 +238,7 @@ export default function Index() {
           </nav>
           <div className="hidden items-center gap-2 sm:flex">
             <Link
-              to="/customer/ride"
+              to={`${!user ? '/auth' : '/customer/ride'}`}
               className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 transition hover:bg-emerald-400"
             >
               <CarFront className="h-4 w-4" /> Ride
@@ -267,7 +277,7 @@ export default function Index() {
                   How it works
                 </a>
                 <Link
-                  to="/customer/ride"
+                  to={`${user ? '/customer/ride' : '/customer/auth'}`}
                   className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 p-3 text-center font-bold text-white"
                 >
                   Ride

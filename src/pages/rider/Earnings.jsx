@@ -3,9 +3,12 @@ import { Wallet, Package, TrendingUp } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { PageHeader } from '@/components/page-header'
 import { useStore } from '@/lib/api-store'
+import { useCurrentUser } from '@/lib/api-store'
+import { Skeleton, SkeletonCard } from '@/components/ui/skeleton'
 
 export default function Earnings() {
   const user = useRequireAuth('rider')
+  const { loading: userLoading } = useCurrentUser()
   const completed = useStore((s) =>
     user ? s.deliveries.filter((d) => d.riderId === user.id && d.status === 'delivered') : [],
   )
@@ -13,6 +16,31 @@ export default function Earnings() {
 
   const total = completed.reduce((a, d) => a + d.price, 0)
   const avg = completed.length ? Math.round(total / completed.length) : 0
+
+  // Show skeleton while user data is hydrating
+  if (userLoading) {
+    return (
+      <AppShell>
+        <main className="p-8 max-w-6xl mx-auto">
+          <SkeletonCard className="mb-8" />
+          <div className="grid grid-cols-3 gap-3">
+            <SkeletonCard className="p-5" />
+            <SkeletonCard className="p-5" />
+            <SkeletonCard className="p-5" />
+          </div>
+          <div className="mt-8 rounded-2xl border border-surface-200 bg-white shadow-sm overflow-hidden">
+            <div className="p-6 space-y-4">
+              <SkeletonCard className="h-12" />
+              <SkeletonCard className="h-12" />
+              <SkeletonCard className="h-12" />
+              <SkeletonCard className="h-12" />
+              <SkeletonCard className="h-12" />
+            </div>
+          </div>
+        </main>
+      </AppShell>
+    )
+  }
 
   return (
     <AppShell>

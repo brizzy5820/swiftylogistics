@@ -10,6 +10,8 @@ import { useRequireAuth } from '@/lib/use-require-auth'
 import { useStore, useCurrentUser, updateDeliveryStatus, STATUS_LABEL } from '@/lib/api-store'
 import { getErrorMessage } from '@/services/api'
 import { getSocket } from '@/lib/socket'
+import { Skeleton, SkeletonCard } from '@/components/ui/skeleton'
+import { MobileRouteMap } from '@/components/mobile-route-map'
 
 const NEXT = {
   accepted: { next: 'picked_up', label: 'Mark as picked up' },
@@ -76,7 +78,34 @@ export default function RiderJob() {
     return incoming
   }, [activeTab, activeJobs, completed, incoming])
 
+  // Loading state for detail view
+  const [detailLoading, setDetailLoading] = useState(true)
+  
+  useEffect(() => {
+    if (!id) return
+    setDetailLoading(true)
+    const timer = setTimeout(() => setDetailLoading(false), 300)
+    return () => clearTimeout(timer)
+  }, [id])
+
   if (!user) return null
+
+  // Show skeleton while loading detail
+  if (id && detailLoading) {
+    return (
+      <AppShell>
+        <main className="mx-auto grid max-w-7xl grid-cols-1 gap-6 p-6 lg:grid-cols-12">
+          <aside className="space-y-6 lg:col-span-4">
+            <SkeletonCard className="p-6" />
+            <SkeletonCard className="p-6" />
+          </aside>
+          <section className="h-[50vh] overflow-hidden rounded-3xl border border-slate-200 sm:h-[60vh] lg:sticky lg:top-24 lg:col-span-8 lg:h-[calc(100vh-7rem)]">
+            <Skeleton className="h-full w-full" />
+          </section>
+        </main>
+      </AppShell>
+    )
+  }
 
   function handleBack() {
     if (window.history.state && window.history.state.idx > 0) {
@@ -208,6 +237,7 @@ export default function RiderJob() {
             <div className="mt-6 space-y-4">
               <JobDetail Icon={MapPin} label="Pickup" value={delivery.pickup.address} />
               <JobDetail Icon={MapPin} label="Dropoff" value={delivery.dropoff.address} />
+              <JobDetail Icon={PackageCheck} label="Vehicle" value={delivery.rider?.plateNumber || delivery.plateNumber} />
               <div className="flex items-center justify-between gap-3">
                 <JobDetail Icon={User} label="Customer" value={delivery.customerName} />
                 {['accepted', 'picked_up', 'in_transit'].includes(delivery.status) && (
@@ -284,7 +314,7 @@ export default function RiderJob() {
           </div>
         </aside>
 
-        <section className="h-[50vh] overflow-hidden rounded-3xl border border-slate-200 sm:h-[60vh] lg:sticky lg:top-24 lg:col-span-8 lg:h-[calc(100vh-7rem)]">
+<section className="h-[50vh] overflow-hidden rounded-3xl border border-slate-200 sm:h-[60vh] lg:sticky lg:top-24 lg:col-span-8 lg:h-[calc(100vh-7rem)]">
           <DeliveryMap
             pickup={delivery.pickup.coords}
             dropoff={delivery.dropoff.coords}
@@ -292,7 +322,16 @@ export default function RiderJob() {
             className="h-full w-full"
           />
         </section>
-      </main>
+      
+      {/* Mobile floating map for route view */}
+      <MobileRouteMap
+        pickup={delivery.pickup.coords}
+        dropoff={delivery.dropoff.coords}
+        courier={delivery.courierPosition}
+        destination={delivery.dropoff.coords}
+        activeLabel={`Tracking · ${delivery.id}`}
+        description={`${delivery.pickup.address} → ${delivery.dropoff.address}`}
+      />
 
       {['accepted', 'picked_up', 'in_transit'].includes(delivery.status) && (
         <ChatPanel
@@ -303,6 +342,7 @@ export default function RiderJob() {
           onOpenChange={setChatOpen}
         />
       )}
+      </main>
     </AppShell>
   )
 }
@@ -318,6 +358,7 @@ function JobMetric({ label, value, Icon }) {
 }
 
 function JobDetail({ Icon, label, value }) {
+  if (!value) return null
   return (
     <div>
       <p className="flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-slate-400">

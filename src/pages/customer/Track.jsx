@@ -442,12 +442,19 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
             <div className="size-12 rounded-xl bg-emerald-50 flex items-center justify-center font-bold text-emerald-600">
               {(deliveryView.riderName ?? '—').split(' ').map((n) => n[0]).join('').slice(0, 2)}
             </div>
-            <div className="flex-1">
-              <p className="text-sm font-bold">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold truncate">
                 {isTerminated ? 'Terminated' : deliveryView.riderName ?? 'Awaiting rider…'}
               </p>
               {riderAssigned && !isTerminated && (
-                <p className="text-xs text-amber-500">★ 4.9 <span className="text-slate-400">(1,240 trips)</span></p>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <p className="text-xs text-amber-500">★ 4.9 <span className="text-slate-400">(1,240 trips)</span></p>
+                  {deliveryView.rider?.plateNumber && (
+                    <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                      {deliveryView.rider.plateNumber}
+                    </span>
+                  )}
+                </div>
               )}
             </div>
             {canContact && (

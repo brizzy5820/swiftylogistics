@@ -37,7 +37,8 @@ let store = {
   supportTickets: [], 
   session: storedSession, 
   hydrated: false, 
-  loading: !storedSession && !storedUsers
+  loading: !storedSession && !storedUsers,
+  hydrateFailed: false
 }
 const listeners = new Set()
 let loadPromise = null
@@ -118,7 +119,7 @@ function wireSocket() {
 }
 
 async function hydrate() {
-  if (store.hydrated || !token()) return
+  if (store.hydrated || !token() || store.hydrateFailed) return
   if (loadPromise) return loadPromise
   store.loading = true
   emit()
@@ -153,6 +154,8 @@ async function hydrate() {
         api.logout()
         store.session = null
         store.users = []
+        store.hydrated = true
+        store.hydrateFailed = true
         localStorage.removeItem('swifty_session')
         localStorage.removeItem('swifty_users')
       }
@@ -166,7 +169,7 @@ async function hydrate() {
 }
 
 export function subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener) }
-export function getStore() { if (!store.hydrated) void hydrate(); return store }
+export function getStore() { if (!store.hydrated && !store.hydrateFailed) void hydrate(); return store }
 export { emit }
 export function useStore(selector) {
   const selectorRef = useRef(selector)
@@ -200,7 +203,7 @@ export function useCurrentUser() {
 
 export async function ensureSession() {
   if (!token()) return null
-  if (!store.hydrated) await hydrate()
+  if (!store.hydrated && !store.hydrateFailed) await hydrate()
   
   return getCurrentUser()
 }
@@ -216,6 +219,7 @@ export async function signIn(email, password) {
   store.session = { userId: data.user.id || data.user._id, role: data.user.role }
   store.users = [data.user]
   store.hydrated = false
+  store.hydrateFailed = false
   emit()
   await hydrate()
   return data.user
@@ -227,6 +231,7 @@ export async function signUp(name, email, role, details = {}) {
   store.session = { userId: data.user.id || data.user._id, role: data.user.role }
   store.users = [data.user]
   store.hydrated = false
+  store.hydrateFailed = false
   emit()
   await hydrate()
   if (role === 'rider' && Object.keys(details).some((key) => !['password'].includes(key))) {
@@ -239,7 +244,7 @@ export async function signUp(name, email, role, details = {}) {
 export function signOut() { 
   api.logout(); 
   disconnectSocket()
-  store = { users: [], deliveries: [], scheduled: [], supportTickets: [], session: null, hydrated: false, loading: false }; 
+  store = { users: [], deliveries: [], scheduled: [], supportTickets: [], session: null, hydrated: false, loading: false, hydrateFailed: false }; 
   localStorage.removeItem('swifty_session')
   localStorage.removeItem('swifty_users')
   emit() 
