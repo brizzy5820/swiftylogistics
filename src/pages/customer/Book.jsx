@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   MapPin, ArrowLeft, ArrowRight,
   CheckCircle2, ArrowLeftRight, Navigation, AlertTriangle, Radio,
-  X,
+  X, ChevronLeftIcon
 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { MobileRouteMap, RouteMapPanel } from '@/components/mobile-route-map'
@@ -740,9 +740,13 @@ export default function Book() {
             <div className="min-w-0 lg:mt-5 md:mt-5  space-y-4">
     
                  {/* Back button */}
-          <div className='flex gap-3 items-center mt-5 mb-5'>
-           <h1 className="mt-2 font-display md:px-6 lg:px-6 text-3xl font-black tracking-tight text-slate-950 sm:text-5xl">Place a Delivery</h1>
+   <div className="max-w-lg gap-3 mt-5 flex items-center">
+            {/* <p className="text-sm font-bold uppercase tracking-wider text-emerald-700">Ride with Swifty</p> */}
+            <Link to="/customer" className='lg:hidden mt-2' ><ChevronLeftIcon className='w-6 h-6'/></Link>
+            <h1 className="mt-2 font-display text-3xl font-black tracking-tight text-slate-950 sm:text-5xl">Place a delivery</h1>
+           
           </div>
+
 
               {/* Main form card */}
               <div className="rounded-2xl  sm:px-7">

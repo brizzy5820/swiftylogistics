@@ -1,6 +1,6 @@
 // pages/customer/ride.jsx (or wherever Ride.jsx lives)
 import { useCallback, useState, useEffect, useRef, useMemo } from 'react'
-import { ArrowLeft, CarFront, Check, Navigation, Users,User, Clock3, X, ArrowRight, Radio, MapPin, LoaderCircle, AlertCircle, RefreshCw, Plus, Minus, Wallet, CreditCard } from 'lucide-react'
+import { ArrowLeft, CarFront, Check, Navigation, Users,User, Clock3, X, ArrowRight, Radio, MapPin, LoaderCircle, AlertCircle, RefreshCw, Plus, Minus, Wallet, CreditCard, ChevronLeftIcon } from 'lucide-react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { AppShell } from '../../components/app-shell'
 import { DeliveryMap } from '../../components/delivery-map'
@@ -522,13 +522,15 @@ function confirmMatchedRide() {
 
   return (
     <AppShell hideMobileHeader>
-      <main className="mx-auto flex flex-col gap-6 px-4 py-6 lg:mt-4 md:mt-4 sm:px-6 lg:grid lg:grid-cols-2 ">
+      <main className="mx-auto flex flex-col gap-6  md:py-3 px-4 py-5 lg:mt-4   sm:px-6 lg:grid lg:grid-cols-2 ">
         {/* Left: route form */}
         <section className="overflow-visible rounded-3xl md:px-3 sm:p-8">
-          <div className="max-w-lg">
-            <p className="text-sm font-bold uppercase tracking-wider text-emerald-700">Ride with Swifty</p>
-            <h1 className="mt-2 font-display text-4xl font-black tracking-tight text-slate-950 sm:text-5xl">Where are you going?</h1>
-          </div>
+            <div className="max-w-lg gap-3  flex items-center">
+              {/* <p className="text-sm font-bold uppercase tracking-wider text-emerald-700">Ride with Swifty</p> */}
+              <Link to="/customer" className='lg:hidden mt-2' ><ChevronLeftIcon className='w-6 h-6'/></Link>
+              <h1 className="mt-2 font-display text-3xl font-black tracking-tight text-slate-950 sm:text-5xl">Let's Ride</h1>
+            
+            </div>
 
           <div className="relative z-20 mt-8 overflow-visible rounded-2xl bg-white p-4 shadow-sm" style={{ overflow: 'visible' }}>
             <div className="relative space-y-6" style={{ overflow: 'visible' }}>

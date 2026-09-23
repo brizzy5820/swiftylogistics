@@ -158,7 +158,7 @@ export default function NotificationsPage() {
                       {group}
                     </p>
                   )}
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="rounded-2xl  bg-gray-100 p-4 ">
                     <div className="flex items-start gap-3">
                       <div
                         className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${Number(item.time) > readAt ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-600"}`}

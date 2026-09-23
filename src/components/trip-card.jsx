@@ -75,7 +75,7 @@ export function TripCard({
         }
       }}
       className={cn(
-        'rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-colors',
+        'rounded-2xl border border-slate-100 bg-white p-4 shadow-xs transition-colors',
         disableNavigation ? 'cursor-default' : 'cursor-pointer hover:border-blue-200',
         className,
       )}
@@ -145,3 +145,4 @@ export function TripCard({
     </div>
   )
 }
+ 

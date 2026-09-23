@@ -53,7 +53,7 @@ function Action({ to, title, subtitle, primary, image }) {
 function MiniAction({ to, title, image }) {
   return (
     <Link to={to} className="flex flex-1 flex-col items-center gap-2 py-1 transition active:scale-95">
-      <span className="flex h-20 w-20  bg-gray-200 p-3 rounded-full items-center justify-center">
+      <span className="flex h-23 w-23  bg-white p-3 rounded-full items-center justify-center">
         <img src={image} alt="" className="h-full w-full object-contain" />
       </span>
       <span className="text-xs font-bold text-slate-900">{title}</span>

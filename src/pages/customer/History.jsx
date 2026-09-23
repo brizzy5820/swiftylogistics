@@ -83,7 +83,7 @@ export default function History() {
 
         <section className="mt-6 space-y-3">
           {deliveries.length === 0 ? (
-            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+            <div className="rounded-2xl  bg-gray-100 p-8 text-center ">
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
                 <Package className="h-6 w-6" />
               </div>
