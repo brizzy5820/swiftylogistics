@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ArrowLeft, Briefcase, CheckCircle2, Clock3, Hourglass, MapPin, PackageCheck, User, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -6,12 +6,12 @@ import { AppShell } from '@/components/app-shell'
 import { DeliveryMap } from '@/components/delivery-map'
 import { TripCard } from '@/components/trip-card'
 import { ChatPanel, ChatLauncher } from '@/components/chat-panel'
+import { MobileDrawer } from '@/components/mobile-drawer'
 import { useRequireAuth } from '@/lib/use-require-auth'
 import { useStore, useCurrentUser, updateDeliveryStatus, STATUS_LABEL } from '@/lib/api-store'
 import { getErrorMessage } from '@/services/api'
 import { getSocket } from '@/lib/socket'
 import { Skeleton, SkeletonCard } from '@/components/ui/skeleton'
-import { MobileRouteMap } from '@/components/mobile-route-map'
 
 const NEXT = {
   accepted: { next: 'picked_up', label: 'Mark as picked up' },
@@ -26,6 +26,16 @@ const TABS = [
 ]
 
 export default function RiderJob() {
+  const { id } = useParams()
+  // Force a clean remount whenever the route moves between the job list
+  // and a specific job (or between two different jobs). Without this, the
+  // same component instance carries over local state/effect timers from
+  // whatever was previously open, which is what made clicking a job card
+  // sometimes land on a broken view until a hard refresh.
+  return <RiderJobView key={id || 'list'} />
+}
+
+function RiderJobView() {
   const user = useRequireAuth('rider')
   const { user: currentUser } = useCurrentUser()
   const navigate = useNavigate()
@@ -35,20 +45,33 @@ export default function RiderJob() {
   const [dismissedRequests, setDismissedRequests] = useState(() => new Set())
   const [chatOpen, setChatOpen] = useState(false)
   const [chatUnread, setChatUnread] = useState(false)
+  // How much of the screen the mobile job-detail sheet is occupying (real
+  // measured px, reported by MobileDrawer) — the background map is pushed
+  // up by exactly this much, same pattern as Ride.jsx.
+  const [sheetOffsetPx, setSheetOffsetPx] = useState(0)
+  const [sheetDragging, setSheetDragging] = useState(false)
+  const handleSheetHeightChange = useCallback((px, dragging = true) => {
+    setSheetOffsetPx(px)
+    setSheetDragging(Boolean(dragging))
+  }, [])
 
   const searchParams = new URLSearchParams(location.search)
   const requestedTab = searchParams.get('tab')
   const activeTab = TABS.some((t) => t.id === requestedTab) ? requestedTab : 'requests'
 
-  const delivery = useStore((s) => s.deliveries.find((d) => d.id === id))
-  const availableRequests = useStore((s) => s.deliveries.filter((d) => d.status === 'pending' && (!d.riderId || d.riderId === currentUser?.id)))
+  // Selecting the raw `deliveries` array and filtering/finding in the
+  // render body (rather than inside the useStore selector) keeps this
+  // always current. A useStore selector's cached value only recomputes on
+  // the next store emit — one closed over `id`/`currentUser` could keep
+  // returning "not found"/empty results after navigating here, until some
+  // unrelated store update happened to fire an emit. That's what made
+  // opening a job from its card sometimes look broken until a refresh.
+  const deliveries = useStore((s) => s.deliveries)
+  const delivery = deliveries.find((d) => d.id === id)
+  const availableRequests = deliveries.filter((d) => d.status === 'pending' && (!d.riderId || d.riderId === currentUser?.id))
   const incoming = availableRequests.filter((d) => !dismissedRequests.has(d.id))
-  const activeJobs = useStore((s) =>
-    currentUser ? s.deliveries.filter((d) => d.riderId === currentUser.id && ['accepted', 'picked_up', 'in_transit'].includes(d.status)) : [],
-  )
-  const completed = useStore((s) =>
-    user ? s.deliveries.filter((d) => d.riderId === user.id && d.status === 'delivered') : [],
-  )
+  const activeJobs = currentUser ? deliveries.filter((d) => d.riderId === currentUser.id && ['accepted', 'picked_up', 'in_transit'].includes(d.status)) : []
+  const completed = user ? deliveries.filter((d) => d.riderId === user.id && d.status === 'delivered') : []
 
   useEffect(() => {
     if (!delivery || delivery.status !== 'in_transit' || !autoMove) return
@@ -93,7 +116,7 @@ export default function RiderJob() {
   // Show skeleton while loading detail
   if (id && detailLoading) {
     return (
-      <AppShell>
+      <AppShell hideMobileHeader>
         <main className="mx-auto grid max-w-7xl grid-cols-1 gap-6 p-6 lg:grid-cols-12">
           <aside className="space-y-6 lg:col-span-4">
             <SkeletonCard className="p-6" />
@@ -136,16 +159,16 @@ export default function RiderJob() {
 
   if (!id) {
     return (
-      <AppShell>
+      <AppShell hideMobileHeader>
         <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-          {/* <button
+           <button
             type="button"
             onClick={handleBack}
             aria-label="Go back"
             className="mb-5 inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
           >
             <ArrowLeft className="h-4 w-4" />
-          </button> */}
+          </button> 
 
           <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -214,124 +237,154 @@ export default function RiderJob() {
   const waitingOnCustomer = delivery.status === 'picked_up' && delivery.type === 'ride' && !delivery.customerConfirmed
   const startTripBlocked = nextStep?.next === 'in_transit' && waitingOnCustomer
 
+  const detailCards = (
+    <>
+      <div className="rounded-2xl border border-surface-200 bg-white p-6 shadow-sm">
+        <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Job</p>
+        <h2 className="mt-1 font-display text-2xl font-bold">{delivery.id}</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          {delivery.type === 'ride' ? `Ride · ${delivery.rideType || ''}` : `Delivery · ${delivery.packageType || ''}`} · {delivery.distanceKm} km · ₦{delivery.price}
+        </p>
+
+        <div className="mt-6 space-y-4">
+          <JobDetail Icon={MapPin} label="Pickup" value={delivery.pickup.address} />
+          <JobDetail Icon={MapPin} label="Dropoff" value={delivery.dropoff.address} />
+          <JobDetail Icon={PackageCheck} label="Vehicle" value={delivery.rider?.plateNumber || delivery.plateNumber} />
+          <div className="flex items-center justify-between gap-3">
+            <JobDetail Icon={User} label="Customer" value={delivery.customerName} />
+            {['accepted', 'picked_up', 'in_transit'].includes(delivery.status) && (
+              <ChatLauncher hasUnread={chatUnread} onClick={() => { setChatOpen(true); setChatUnread(false) }} />
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-surface-200 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Current status</p>
+          <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-bold uppercase text-emerald-600">
+            {STATUS_LABEL[delivery.status]}
+          </span>
+        </div>
+
+        {nextStep ? (
+          <div className="space-y-3">
+            {startTripBlocked && (
+              <p className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-700">
+                <Hourglass className="h-3.5 w-3.5 shrink-0" /> Waiting for the customer to confirm on their track page — this unlocks automatically.
+              </p>
+            )}
+            <button
+              disabled={startTripBlocked}
+              onClick={async () => {
+                try {
+                  await updateDeliveryStatus(id, nextStep.next)
+                  toast.success('Job updated')
+                } catch (error) {
+                  toast.error(getErrorMessage(error, 'Unable to update this job.'))
+                  return
+                }
+                if (nextStep.next === 'in_transit') setAutoMove(true)
+              }}
+              className="w-full rounded-xl bg-emerald-600 py-3 font-bold text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-emerald-600"
+            >
+              {nextStep.label}
+            </button>
+            {['accepted', 'picked_up', 'in_transit'].includes(delivery.status) && (
+              <button
+                onClick={async () => {
+                  if (!window.confirm('Are you sure you want to cancel this job?')) return
+                  try {
+                    await updateDeliveryStatus(id, 'cancelled')
+                    toast.success('Job cancelled')
+                    navigate('/rider/job')
+                  } catch (error) {
+                    toast.error(getErrorMessage(error, 'Unable to cancel this job.'))
+                  }
+                }}
+                className="w-full flex items-center justify-center gap-2 rounded-xl border border-red-200 py-3 text-sm font-bold text-red-500 hover:bg-red-50 transition-colors"
+              >
+                <X className="h-4 w-4" /> Cancel job
+              </button>
+            )}
+          </div>
+        ) : delivery.status === 'delivered' ? (
+          <div>
+            <p className="flex items-center gap-2 text-sm font-bold text-emerald-600">
+              <CheckCircle2 className="h-4 w-4" /> Delivered successfully
+            </p>
+            <button
+              onClick={() => navigate('/rider/job')}
+              className="mt-4 w-full rounded-xl bg-slate-900 py-3 font-bold text-white hover:bg-emerald-600"
+            >
+              Back to jobs
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">No action available.</p>
+        )}
+      </div>
+    </>
+  )
+
   return (
-    <AppShell>
+    <AppShell  hideMobileHeader>
       <main className="mx-auto grid max-w-7xl grid-cols-1 gap-6 p-6 lg:grid-cols-12">
-        <aside className="space-y-6 lg:col-span-4">
+        <aside className="hidden space-y-6 lg:col-span-4 lg:block">
           <button
             type="button"
             onClick={handleBack}
             aria-label="Go back"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
+            className="inline-flex gap-2 items-center justify-center rounded-full  transition hover:bg-slate-50 hover:text-slate-900"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-6 w-6" /> <h3 className="font-display text-3xl font-bold tracking-tight text-slate-900">Jobs</h3>
           </button>
 
-          <div className="rounded-2xl border border-surface-200 bg-white p-6 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Job</p>
-            <h2 className="mt-1 font-display text-2xl font-bold">{delivery.id}</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              {delivery.type === 'ride' ? `Ride · ${delivery.rideType || ''}` : `Delivery · ${delivery.packageType || ''}`} · {delivery.distanceKm} km · ₦{delivery.price}
-            </p>
-
-            <div className="mt-6 space-y-4">
-              <JobDetail Icon={MapPin} label="Pickup" value={delivery.pickup.address} />
-              <JobDetail Icon={MapPin} label="Dropoff" value={delivery.dropoff.address} />
-              <JobDetail Icon={PackageCheck} label="Vehicle" value={delivery.rider?.plateNumber || delivery.plateNumber} />
-              <div className="flex items-center justify-between gap-3">
-                <JobDetail Icon={User} label="Customer" value={delivery.customerName} />
-                {['accepted', 'picked_up', 'in_transit'].includes(delivery.status) && (
-                  <ChatLauncher hasUnread={chatUnread} onClick={() => { setChatOpen(true); setChatUnread(false) }} />
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-surface-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Current status</p>
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-bold uppercase text-emerald-600">
-                {STATUS_LABEL[delivery.status]}
-              </span>
-            </div>
-
-            {nextStep ? (
-              <div className="space-y-3">
-                {startTripBlocked && (
-                  <p className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-700">
-                    <Hourglass className="h-3.5 w-3.5 shrink-0" /> Waiting for the customer to confirm on their track page — this unlocks automatically.
-                  </p>
-                )}
-                <button
-                  disabled={startTripBlocked}
-                  onClick={async () => {
-                    try {
-                      await updateDeliveryStatus(id, nextStep.next)
-                      toast.success('Job updated')
-                    } catch (error) {
-                      toast.error(getErrorMessage(error, 'Unable to update this job.'))
-                      return
-                    }
-                    if (nextStep.next === 'in_transit') setAutoMove(true)
-                  }}
-                  className="w-full rounded-xl bg-emerald-600 py-3 font-bold text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-emerald-600"
-                >
-                  {nextStep.label}
-                </button>
-                {['accepted', 'picked_up', 'in_transit'].includes(delivery.status) && (
-                  <button
-                    onClick={async () => {
-                      if (!window.confirm('Are you sure you want to cancel this job?')) return
-                      try {
-                        await updateDeliveryStatus(id, 'cancelled')
-                        toast.success('Job cancelled')
-                        navigate('/rider/job')
-                      } catch (error) {
-                        toast.error(getErrorMessage(error, 'Unable to cancel this job.'))
-                      }
-                    }}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl border border-red-200 py-3 text-sm font-bold text-red-500 hover:bg-red-50 transition-colors"
-                  >
-                    <X className="h-4 w-4" /> Cancel job
-                  </button>
-                )}
-              </div>
-            ) : delivery.status === 'delivered' ? (
-              <div>
-                <p className="flex items-center gap-2 text-sm font-bold text-emerald-600">
-                  <CheckCircle2 className="h-4 w-4" /> Delivered successfully
-                </p>
-                <button
-                  onClick={() => navigate('/rider/job')}
-                  className="mt-4 w-full rounded-xl bg-slate-900 py-3 font-bold text-white hover:bg-emerald-600"
-                >
-                  Back to jobs
-                </button>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-500">No action available.</p>
-            )}
-          </div>
+          {detailCards}
         </aside>
 
-<section className="h-[50vh] overflow-hidden rounded-3xl border border-slate-200 sm:h-[60vh] lg:sticky lg:top-24 lg:col-span-8 lg:h-[calc(100vh-7rem)]">
+<section className="h-[50vh] hidden overflow-hidden rounded-3xl border border-slate-200 sm:h-[60vh] lg:sticky lg:block lg:top-24 lg:col-span-8 lg:h-[calc(100vh-7rem)]">
           <DeliveryMap
             pickup={delivery.pickup.coords}
             dropoff={delivery.dropoff.coords}
             courier={delivery.courierPosition}
+            pickupAddress={delivery.pickup.address}
+            dropoffAddress={delivery.dropoff.address}
             className="h-full w-full"
           />
         </section>
-      
-      {/* Mobile floating map for route view */}
-      <MobileRouteMap
-        pickup={delivery.pickup.coords}
-        dropoff={delivery.dropoff.coords}
-        courier={delivery.courierPosition}
-        destination={delivery.dropoff.coords}
-        activeLabel={`Tracking · ${delivery.id}`}
-        description={`${delivery.pickup.address} → ${delivery.dropoff.address}`}
-      />
+
+        {/* Mobile: full-bleed live map behind a draggable details sheet —
+            same pattern as the active-ride view in customer/Ride.jsx. No
+            floating map button here any more; the map is always the
+            background, just revealed/covered as the sheet is dragged. */}
+        <div className="lg:hidden">
+          <div
+            className="fixed inset-x-0 top-0 z-[100]"
+            style={{ bottom: sheetOffsetPx, transition: sheetDragging ? 'none' : 'bottom 0.25s ease' }}
+          >
+            <DeliveryMap
+              pickup={delivery.pickup.coords}
+              dropoff={delivery.dropoff.coords}
+              courier={delivery.courierPosition}
+              pickupAddress={delivery.pickup.address}
+              dropoffAddress={delivery.dropoff.address}
+              className="h-full w-full"
+            />
+            <button
+              type="button"
+              onClick={handleBack}
+              aria-label="Go back"
+              className="absolute left-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-lg"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+          </div>
+
+          <MobileDrawer onHeightChange={handleSheetHeightChange}>
+            <div className="space-y-6">{detailCards}</div>
+          </MobileDrawer>
+        </div>
 
       {['accepted', 'picked_up', 'in_transit'].includes(delivery.status) && (
         <ChatPanel

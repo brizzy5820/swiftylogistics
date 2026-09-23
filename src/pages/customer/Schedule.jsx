@@ -249,6 +249,8 @@ export default function Schedule() {
                   <DeliveryMap
                     pickup={pickupCoords}
                     dropoff={dropoffCoords}
+                    pickupAddress={pickup}
+                    dropoffAddress={dropoff}
                     className="h-full w-full"
                   />
                 </div>

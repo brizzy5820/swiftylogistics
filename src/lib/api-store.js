@@ -213,6 +213,10 @@ export function getCurrentUser() {
   return current || (store.session ? { id: store.session.userId, role: store.session.role } : null)
 }
 
+function clearSessionFlags() {
+  try { sessionStorage.removeItem('swifty_payment_reminder_seen') } catch {}
+}
+
 export async function signIn(email, password) {
   const data = await api.login({ email, password })
   api.setToken(data.accessToken)
@@ -220,6 +224,7 @@ export async function signIn(email, password) {
   store.users = [data.user]
   store.hydrated = false
   store.hydrateFailed = false
+  clearSessionFlags()
   emit()
   await hydrate()
   return data.user
@@ -232,6 +237,7 @@ export async function signUp(name, email, role, details = {}) {
   store.users = [data.user]
   store.hydrated = false
   store.hydrateFailed = false
+  clearSessionFlags()
   emit()
   await hydrate()
   if (role === 'rider' && Object.keys(details).some((key) => !['password'].includes(key))) {
@@ -244,6 +250,7 @@ export async function signUp(name, email, role, details = {}) {
 export function signOut() { 
   api.logout(); 
   disconnectSocket()
+  clearSessionFlags()
   store = { users: [], deliveries: [], scheduled: [], supportTickets: [], session: null, hydrated: false, loading: false, hydrateFailed: false }; 
   localStorage.removeItem('swifty_session')
   localStorage.removeItem('swifty_users')

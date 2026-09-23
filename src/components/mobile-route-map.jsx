@@ -1,8 +1,22 @@
 import { useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
-import { DeliveryMap } from './delivery-map'
+import { DeliveryMap, API_KEY } from './delivery-map'
+import { ShimmerImage } from './shimmer-image'
 
-export function MobileRouteMap({ pickup, dropoff, courier, courierInfo, destination, activeLabel, description }) {
+// A tiny 64px floating button has no business booting the full Google Maps
+// JS SDK just to render a thumbnail — that's real, avoidable load. Show a
+// static map image instead; the live, interactive map only mounts once the
+// button is actually tapped and the full-screen view opens.
+function staticMapUrl(pickup, dropoff) {
+  if (!API_KEY || !pickup) return null
+  const markers = [
+    `markers=color:0x10B981%7Clabel:A%7C${pickup.lat},${pickup.lng}`,
+    dropoff ? `markers=color:0x0F172A%7Clabel:B%7C${dropoff.lat},${dropoff.lng}` : null,
+  ].filter(Boolean).join('&')
+  return `https://maps.googleapis.com/maps/api/staticmap?size=160x160&scale=2&maptype=roadmap&${markers}&key=${API_KEY}`
+}
+
+export function MobileRouteMap({ pickup, dropoff, courier, courierInfo, destination, pickupAddress, dropoffAddress, activeLabel, description }) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -14,14 +28,16 @@ export function MobileRouteMap({ pickup, dropoff, courier, courierInfo, destinat
           className="relative h-16 w-16 overflow-hidden rounded-full border-2 border-white shadow-xl ring-2 ring-blue-300"
           aria-label="Show route map"
         >
-          <div className="pointer-events-none h-full w-full">
-            <DeliveryMap
-              pickup={pickup}
-              dropoff={dropoff}
-              courier={courier}
-              courierInfo={courierInfo}
-              destination={destination}
-              className="h-full w-full"
+          <ShimmerImage
+            src={staticMapUrl(pickup, dropoff)}
+            className="pointer-events-none h-full w-full bg-slate-200"
+            imgClassName="h-full w-full object-cover"
+          />
+          <div className="absolute left-1/2 top-2 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full bg-white/95 p-1 shadow-md">
+            <img
+              src="https://www.gstatic.com/images/branding/product/2x/maps_96dp.png"
+              alt="Google Maps"
+              className="h-full w-full object-contain"
             />
           </div>
           <div className="absolute inset-0 flex items-end justify-center rounded-full bg-gradient-to-t from-black/40 to-transparent pb-1.5">
@@ -38,6 +54,8 @@ export function MobileRouteMap({ pickup, dropoff, courier, courierInfo, destinat
             courier={courier}
             courierInfo={courierInfo}
             destination={destination}
+            pickupAddress={pickupAddress}
+            dropoffAddress={dropoffAddress}
             className="h-full w-full"
           />
           <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4">
@@ -64,7 +82,7 @@ export function MobileRouteMap({ pickup, dropoff, courier, courierInfo, destinat
   )
 }
 
-export function RouteMapPanel({ pickup, dropoff, courier, courierInfo, destination, activeLabel }) {
+export function RouteMapPanel({ pickup, dropoff, courier, courierInfo, destination, pickupAddress, dropoffAddress, activeLabel }) {
   return (
     <div className="sticky top-6 h-full min-h-[520px]">
       <div className="relative h-full min-h-[520px] overflow-hidden rounded-3xl border border-slate-200">
@@ -80,6 +98,8 @@ export function RouteMapPanel({ pickup, dropoff, courier, courierInfo, destinati
           courier={courier}
           courierInfo={courierInfo}
           destination={destination}
+          pickupAddress={pickupAddress}
+          dropoffAddress={dropoffAddress}
           className="h-full w-full"
         />
       </div>

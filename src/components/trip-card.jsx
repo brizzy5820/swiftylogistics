@@ -38,26 +38,21 @@ export function TripCard({
       : 'bg-emerald-600 text-white hover:bg-emerald-500',
   )
 
-  // Where the whole card goes when clicked — falls back to trackingId, then id,
-  // so this still works for cards that don't pass an explicit actionTo.
   const trackTo = actionTo ?? (role === 'rider' ? `/rider/job/${d.id}` : `/customer/track/${d.trackingId ?? d.id}`)
 
   function handleCardClick() {
     if (disableNavigation) return
 
-    // If a parent passes its own onClick (e.g. History.jsx opening a details
-    // modal), that parent owns the click entirely — don't also navigate, or
-    // you get "modal opens, then immediately routes away" as both fire.
     if (onClick) {
       onClick(d)
       return
     }
+    // Fire action handlers before routing to guarantee store state update
+    onAction?.()
     onBeforeNavigate?.()
     navigate(trackTo)
   }
 
-  // Stop the inner action from also triggering the card's own onClick —
-  // this is the "Link inside a clickable wrapper" double-nav issue.
   function handleActionClick(e) {
     e.stopPropagation()
     onAction?.(e)
@@ -114,9 +109,6 @@ export function TripCard({
           {d.price != null && <span className="font-semibold text-slate-700">₦{d.price}</span>}
         </div>
 
-        {/* Inner action is optional now — the whole card already navigates on click.
-            If you keep passing actionTo/onAction, this stays as a secondary explicit
-            button but no longer double-fires navigation. */}
         <div className="flex shrink-0 items-center gap-2">
           {onSecondary && (
             <button
@@ -135,10 +127,11 @@ export function TripCard({
               to={actionTo}
               onClick={(e) => {
                 e.stopPropagation()
+                // FIX: Ensure state modifications/fetches occur on the parent link click
+                onAction?.(e) 
                 onBeforeNavigate?.()
               }}
               className={actionClassName}
-             
             >
               {label}
             </Link>

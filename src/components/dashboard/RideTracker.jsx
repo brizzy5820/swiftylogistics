@@ -80,6 +80,8 @@ export function RideTracker() {
             courier={courier}
             courierInfo={courierInfo}
             destination={dropoff}
+            pickupAddress={latestRide.pickup?.address || 'Pickup location'}
+            dropoffAddress={latestRide.dropoff?.address || 'Dropoff location'}
             className="h-full w-full"
           />
        

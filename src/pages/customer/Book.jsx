@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from 'react'
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   MapPin, ArrowLeft, ArrowRight,
@@ -7,10 +7,13 @@ import {
 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { MobileRouteMap, RouteMapPanel } from '@/components/mobile-route-map'
+import { RiderSearchDrawer, SEARCH_COUNTDOWN_MS } from '@/components/rider-search-drawer'
 import { useRequireAuth } from '@/lib/use-require-auth'
-import { createDelivery, useStore } from '@/lib/api-store'
+import { createDelivery, updateDeliveryStatus, useStore } from '@/lib/api-store'
 import { getErrorMessage } from '@/services/api'
 import { reverseGeocode } from '@/lib/address-suggestions'
+
+const SEARCH_TIMEOUT_MS = 60000
 
 
 
@@ -409,15 +412,89 @@ export default function Book() {
 
   /* map UI state */
 
-  /* live, in-progress delivery for this customer — drives the live map */
-  const activeDelivery = useStore((s) => {
-    if (!user) return null
-    return s.deliveries.find(
-      (d) => d.customerId === user.id && (d.type === 'delivery' || !d.type) && !['delivered', 'cancelled'].includes(d.status),
-    ) || null
-  })
+  /* live, in-progress delivery for this customer — drives the live map.
+     Selecting the raw `deliveries` array (no external closure over `user`)
+     and filtering in the render body keeps this always current — a
+     useStore selector closed over `user` only recomputes on the next
+     store emit, which can lag behind `user` actually resolving. */
+  const deliveriesRaw = useStore((s) => s.deliveries)
+  const usersRaw = useStore((s) => s.users)
+  const activeDelivery = user
+    ? deliveriesRaw.find((d) => d.customerId === user.id && (d.type === 'delivery' || !d.type) && !['delivered', 'cancelled'].includes(d.status)) || null
+    : null
   const liveCourier = activeDelivery?.courierPosition || null
-  const liveRider = useStore((s) => activeDelivery?.riderId ? s.users.find((u) => u.id === activeDelivery.riderId) : null)
+  const liveRider = activeDelivery?.riderId ? usersRaw.find((u) => u.id === activeDelivery.riderId) : null
+
+  /* rider search — shown after "Confirm booking" instead of navigating
+     straight to the track page. Unlike Ride.jsx (which actively polls an
+     "assign a rider" endpoint), a delivery is matched passively: any
+     online rider can accept it from their job list, and that acceptance
+     reaches us live via the socket-driven store update. So this just
+     watches the store for `riderId` to appear on the delivery we created. */
+  const [searchingDeliveryId, setSearchingDeliveryId] = useState(null)
+  const [matchedDelivery, setMatchedDelivery] = useState(null)
+  const [timedOut, setTimedOut] = useState(false)
+  const [searchCountdown, setSearchCountdown] = useState(SEARCH_COUNTDOWN_MS / 1000)
+  const [sheetOffsetPx, setSheetOffsetPx] = useState(0)
+  const handleSheetHeightChange = useCallback((px) => setSheetOffsetPx(px), [])
+  const watchedDelivery = searchingDeliveryId ? deliveriesRaw.find((d) => d.id === searchingDeliveryId) : null
+
+  useEffect(() => {
+    if (!searchingDeliveryId || !watchedDelivery?.riderId) return
+    setMatchedDelivery(watchedDelivery)
+    setSearchingDeliveryId(null)
+    setTimedOut(false)
+  }, [searchingDeliveryId, watchedDelivery?.riderId])
+
+  useEffect(() => {
+    if (!searchingDeliveryId || timedOut || matchedDelivery) {
+      setSearchCountdown(SEARCH_COUNTDOWN_MS / 1000)
+      return
+    }
+    const timer = setInterval(() => {
+      setSearchCountdown((prev) => (prev <= 1 ? 0 : prev - 1))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [searchingDeliveryId, timedOut, matchedDelivery])
+
+  useEffect(() => {
+    if (!searchingDeliveryId) return undefined
+    let cancelled = false
+    const timeoutTimer = window.setTimeout(() => {
+      if (!cancelled) setTimedOut(true)
+    }, SEARCH_TIMEOUT_MS)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeoutTimer)
+    }
+  }, [searchingDeliveryId])
+
+  async function cancelDeliverySearch() {
+    const deliveryId = searchingDeliveryId || matchedDelivery?.id
+    if (deliveryId) {
+      try {
+        await updateDeliveryStatus(deliveryId, 'cancelled')
+      } catch (error) {
+        setSubmitError(getErrorMessage(error, 'Unable to cancel this delivery.'))
+      }
+    }
+    setSearchingDeliveryId(null)
+    setMatchedDelivery(null)
+    setTimedOut(false)
+  }
+
+  function retryDeliverySearch() {
+    // The delivery is still 'pending' and still visible to every online
+    // rider — there's nothing to re-request, just keep waiting.
+    setTimedOut(false)
+    if (matchedDelivery?.id && !searchingDeliveryId) setSearchingDeliveryId(matchedDelivery.id)
+  }
+
+  function confirmMatchedDelivery() {
+    if (!matchedDelivery) return
+    navigate('/customer/track/' + matchedDelivery.id)
+    setMatchedDelivery(null)
+  }
   const liveCourierInfo = activeDelivery ? {
     riderName: activeDelivery.riderName || 'Driver en route',
     rideType: activeDelivery.packageType,
@@ -561,7 +638,7 @@ export default function Book() {
         note: note.trim(),
       })
       navigator.clipboard?.writeText(delivery.trackingId)
-      navigate('/customer/track/' + delivery.id)
+      setSearchingDeliveryId(delivery.id)
     } catch (error) {
       console.error(error)
       setSubmitError(getErrorMessage(error, 'Unable to create delivery. Please review the route and try again.'))
@@ -671,6 +748,14 @@ export default function Book() {
               <div className="rounded-2xl  sm:px-7">
                 <StepBar />
 
+                {searchingDeliveryId || matchedDelivery ? (
+                  <div className="flex flex-col items-center gap-2 rounded-2xl bg-white p-10 text-center shadow-sm">
+                    <p className="font-display text-lg font-bold text-slate-900">
+                      {matchedDelivery ? 'Rider assigned!' : 'Finding you a rider…'}
+                    </p>
+                    <p className="text-sm text-slate-500">See the panel below for live status.</p>
+                  </div>
+                ) : (
                 <form onSubmit={handleSubmit}>
                   {/* ─── STEP 0: Route ─── */}
                   {step === 0 && (
@@ -936,6 +1021,7 @@ export default function Book() {
                     </p>
                   )}
                 </form>
+                )}
               </div>
             </div>
 
@@ -944,6 +1030,8 @@ export default function Book() {
               <RouteMapPanel
                 pickup={activeDelivery ? activeDelivery.pickup.coords : pickupCoords}
                 dropoff={activeDelivery ? activeDelivery.dropoff.coords : dropoffCoords}
+                pickupAddress={activeDelivery ? activeDelivery.pickup.address : confirmedPickup}
+                dropoffAddress={activeDelivery ? activeDelivery.dropoff.address : confirmedDropoff}
                 courier={liveCourier}
                 courierInfo={liveCourierInfo}
                 destination={activeDelivery ? activeDelivery.dropoff.coords : dropoffCoords}
@@ -958,12 +1046,26 @@ export default function Book() {
       <MobileRouteMap
         pickup={activeDelivery ? activeDelivery.pickup.coords : pickupCoords}
         dropoff={activeDelivery ? activeDelivery.dropoff.coords : dropoffCoords}
+        pickupAddress={activeDelivery ? activeDelivery.pickup.address : confirmedPickup}
+        dropoffAddress={activeDelivery ? activeDelivery.dropoff.address : confirmedDropoff}
         courier={liveCourier}
         courierInfo={liveCourierInfo}
         destination={activeDelivery ? activeDelivery.dropoff.coords : dropoffCoords}
         activeLabel={activeDelivery ? `Tracking · ${activeDelivery.id}` : 'Route preview'}
         description={`${pickupQuery || 'Pickup'} → ${dropoffQuery || 'Dropoff'}`}
       />
+
+      {(searchingDeliveryId || matchedDelivery) && (
+        <RiderSearchDrawer
+          rider={matchedDelivery ? liveRider || { name: matchedDelivery.riderName } : null}
+          onCancel={cancelDeliverySearch}
+          onConfirm={confirmMatchedDelivery}
+          onHeightChange={handleSheetHeightChange}
+          onRetry={retryDeliverySearch}
+          timedOut={timedOut}
+          countdown={searchCountdown}
+        />
+      )}
     </AppShell>
   );
 }

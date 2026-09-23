@@ -536,6 +536,8 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
         courier={deliveryView.courierPosition}
         courierInfo={{ riderName: deliveryView.riderName, rideType: deliveryView.rideType, phone: deliveryView.rider?.phone }}
         destination={deliveryView.dropoff.coords}
+        pickupAddress={deliveryView.pickup.address}
+        dropoffAddress={deliveryView.dropoff.address}
         className="h-full w-full"
       />
     </div>
@@ -589,6 +591,8 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
                 courier={deliveryView.courierPosition}
                 courierInfo={{ riderName: deliveryView.riderName, rideType: deliveryView.rideType, phone: deliveryView.rider?.phone }}
                 destination={deliveryView.dropoff.coords}
+                pickupAddress={deliveryView.pickup.address}
+                dropoffAddress={deliveryView.dropoff.address}
                 className="h-full"
               />
             </section>

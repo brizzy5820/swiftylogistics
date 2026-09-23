@@ -9,13 +9,18 @@ import { useStore, updateDeliveryStatus } from '@/lib/api-store'
 import { RiderMap } from '@/components/rider-map'
 import { getErrorMessage } from '@/services/api'
 
-const MAP_COLLAPSED = 36
 const MAP_DEFAULT = 260
 const MAP_MAX = 560
 // Desktop sidebar
 const SIDEBAR_MAX = 320
 const SIDEBAR_DEFAULT = 400
 const SIDEBAR_MIN = 820
+
+// The "finish your profile" reminder should surface once per session — the
+// moment a rider lands on the dashboard right after signing in/up — and
+// never again until they sign out and back in. sessionStorage (not React
+// state) is what makes that survive navigating away from /rider and back.
+const REMINDER_SEEN_KEY = 'swifty_payment_reminder_seen'
 
 function getGreeting() {
   const h = new Date().getHours()
@@ -169,13 +174,32 @@ function ActiveJobsList({ myJobs }) {
   )
 }
 
+function CompletedList({ completed }) {
+  if (completed.length === 0) {
+    return <p className="py-10 text-center text-sm text-slate-500">Completed trips will show up here.</p>
+  }
+  return (
+    <div className="space-y-3">
+      {completed.slice(0, 5).map((d) => (
+        <TripCard key={d.id} delivery={d} actionLabel="View" actionTo={'/rider/job/' + d.id} />
+      ))}
+    </div>
+  )
+}
+
 // ---------- Main component ----------
 
 export default function RiderDashboard() {
   const user = useRequireAuth('rider')
-  const [mapHeight, setMapHeight] = useState(MAP_COLLAPSED)
-  const [showMap, setShowMap] = useState(false)
-  const [paymentDismissed, setPaymentDismissed] = useState(false)
+  // Mobile map reveal: starts fully hidden (0). Dragging the handle below
+  // the map area grows this height live; releasing snaps to the nearest of
+  // [hidden, default, max]. No more explicit "Show map" button.
+  const [mapHeight, setMapHeight] = useState(0)
+  const [mapDragging, setMapDragging] = useState(false)
+  const mapDragRef = useRef({ startY: 0, startHeight: 0 })
+  const [paymentDismissed, setPaymentDismissed] = useState(() => {
+    try { return sessionStorage.getItem(REMINDER_SEEN_KEY) === '1' } catch { return false }
+  })
   const [dismissedRequests, setDismissedRequests] = useState(() => new Set())
   const [loading, setLoading] = useState(true)
   
@@ -184,14 +208,20 @@ export default function RiderDashboard() {
   const [isResizing, setIsResizing] = useState(false)
   const resizeStartRef = useRef({ x: 0, width: SIDEBAR_DEFAULT })
 
-  const availableRequests = useStore((s) => s.deliveries.filter((d) => d.status === 'pending' && (!d.riderId || d.riderId === user?.id)))
+  // Selecting from the raw `deliveries` array (no external closures) keeps
+  // this store-subscribed and always current. Deriving incoming/myJobs/
+  // completed from it in the render body — rather than closing over `user`
+  // inside the useStore selector itself — is what fixes earnings/jobs going
+  // stale until some unrelated store update (e.g. accepting a job) forced a
+  // resync: a useStore selector's cached value only recomputes on the next
+  // store emit, so a selector closed over `user` (which resolves slightly
+  // later, from useRequireAuth's own async effect) kept using a stale
+  // "user is null" result until something else happened to emit again.
+  const deliveries = useStore((s) => s.deliveries)
+  const availableRequests = user ? deliveries.filter((d) => d.status === 'pending' && (!d.riderId || d.riderId === user.id)) : []
   const incoming = availableRequests.filter((d) => !dismissedRequests.has(d.id))
-  const myJobs = useStore((s) =>
-    user ? s.deliveries.filter((d) => d.riderId === user.id && d.status !== 'delivered' && d.status !== 'cancelled') : [],
-  )
-  const completed = useStore((s) =>
-    user ? s.deliveries.filter((d) => d.riderId === user.id && d.status === 'delivered') : [],
-  )
+  const myJobs = user ? deliveries.filter((d) => d.riderId === user.id && d.status !== 'delivered' && d.status !== 'cancelled') : []
+  const completed = user ? deliveries.filter((d) => d.riderId === user.id && d.status === 'delivered') : []
   const todayEarnings = completed.reduce((a, d) => a + d.price, 0)
 
   const firstName = user?.name?.split(' ')[0] || ''
@@ -206,6 +236,15 @@ export default function RiderDashboard() {
     const timer = window.setTimeout(() => setLoading(false), 250)
     return () => window.clearTimeout(timer)
   }, [user?.id])
+
+  // Mark the reminder as seen the instant it's actually shown — not just on
+  // dismiss — so navigating away (without tapping anything) and back to
+  // /rider never brings it up again this session.
+  useEffect(() => {
+    if (paymentIncomplete && !paymentDismissed) {
+      try { sessionStorage.setItem(REMINDER_SEEN_KEY, '1') } catch {}
+    }
+  }, [paymentIncomplete, paymentDismissed])
 
   async function accept(id) {
     try {
@@ -230,12 +269,30 @@ export default function RiderDashboard() {
     toast.message('Request hidden from your list')
   }
 
-  // Mobile: toggle map visibility
-  function toggleMap() {
-    const next = !showMap
-    setShowMap(next)
-    setMapHeight(next ? MAP_DEFAULT : MAP_COLLAPSED)
-  }
+  // Mobile: drag the handle strip down to reveal the map, up to hide it.
+  const MAP_SNAPS = [0, MAP_DEFAULT, MAP_MAX]
+  const clampMapHeight = (value) => Math.min(MAP_MAX, Math.max(0, value))
+
+  const handleMapDragStart = useCallback((event) => {
+    mapDragRef.current = { startY: event.clientY, startHeight: mapHeight }
+    setMapDragging(true)
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+  }, [mapHeight])
+
+  const handleMapDragMove = useCallback((event) => {
+    if (!mapDragging) return
+    const delta = event.clientY - mapDragRef.current.startY
+    setMapHeight(clampMapHeight(mapDragRef.current.startHeight + delta))
+  }, [mapDragging])
+
+  const handleMapDragEnd = useCallback(() => {
+    if (!mapDragging) return
+    setMapDragging(false)
+    setMapHeight((current) => MAP_SNAPS.reduce((closest, point) =>
+      Math.abs(point - current) < Math.abs(closest - current) ? point : closest, MAP_SNAPS[0]))
+  }, [mapDragging])
+
+  const showMap = mapHeight > 20
 
   // Desktop: resize handlers
   const handleResizeStart = useCallback((e) => {
@@ -273,9 +330,9 @@ export default function RiderDashboard() {
       {paymentIncomplete && !paymentDismissed && (
         <div  onClick={() => setPaymentDismissed(true)} className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-4 sm:items-center">
           <div className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl">
-            <div className="relative h-32 w-full bg-emerald-900  ">
+            <div className="relative h-25 w-full">
               <div className="absolute inset-0 flex items-center justify-center">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-lg ring-1 ring-amber-200">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl ">
                   <AlertCircle className="h-8 w-8 text-amber-500" />
                 </div>
               </div>
@@ -332,32 +389,32 @@ export default function RiderDashboard() {
 
       {/* ================= MOBILE ================= */}
       <div className="md:hidden">
-        <div 
-          className="relative overflow-hidden bg-slate-100 transition-all duration-300" 
-          style={{ height: mapHeight }}
+        <div
+          className="relative overflow-hidden bg-slate-100"
+          style={{ height: mapHeight, transition: mapDragging ? 'none' : 'height 0.28s cubic-bezier(0.32, 0.72, 0, 1)' }}
         >
           {showMap && (
             <>
               <RiderMap jobs={mapJobs} onAccept={accept} />
-              <div className="pointer-events-none absolute inset-x-0 top-0 z-[410] bg-gradient-to-b from-slate-950/45 via-slate-950/20 to-transparent px-4 pb-8 pt-3">
-              
-              </div>
               <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-slate-950/20 to-transparent" />
               <div className="absolute right-3 top-3">
                 <OnlineBadge light jobCount={mapJobs.length} />
               </div>
             </>
           )}
+        </div>
 
-          <button
-            type="button"
-            onClick={toggleMap}
-            aria-label={showMap ? 'Hide map' : 'Show map'}
-            className="absolute bottom-1 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wider text-slate-600 hover:bg-slate-50 active:bg-slate-100 shadow-sm"
-          >
-            <GripHorizontal className="h-4 w-4" />
-            {showMap ? 'Hide map' : 'Show map'}
-          </button>
+        {/* Drag this handle down to reveal the map, up to hide it — no map
+            is rendered at all until it's been dragged open at least once. */}
+        <div
+          onPointerDown={handleMapDragStart}
+          onPointerMove={handleMapDragMove}
+          onPointerUp={handleMapDragEnd}
+          onPointerCancel={handleMapDragEnd}
+          className="flex touch-none cursor-grab select-none items-center justify-center gap-2 border-b border-slate-200 bg-white py-2 text-2xs font-bold uppercase tracking-wider text-slate-400 active:cursor-grabbing"
+        >
+          <GripHorizontal className="h-3.5 w-3.5" />
+          {showMap ? 'Drag to hide map' : 'Drag down for map'}
         </div>
 
         <div className="space-y-4 p-4">
@@ -374,6 +431,18 @@ export default function RiderDashboard() {
 
           <SectionCard title="Job requests" subtitle={`${incoming.length} available nearby`}>
             <IncomingList incoming={incoming} onAccept={accept} onReject={reject} />
+          </SectionCard>
+
+          <SectionCard
+            title="Completed"
+            subtitle={`${completed.length} total · ₦${todayEarnings}`}
+            right={completed.length > 0 && (
+              <Link to="/rider/earnings" className="text-xs font-bold text-emerald-600 hover:text-emerald-500">
+                View earnings
+              </Link>
+            )}
+          >
+            <CompletedList completed={completed} />
           </SectionCard>
         </div>
       </div>
@@ -404,6 +473,18 @@ export default function RiderDashboard() {
 
           <SectionCard title="Job requests" subtitle={`${incoming.length} available nearby`}>
             <IncomingList incoming={incoming} onAccept={accept} onReject={reject} />
+          </SectionCard>
+
+          <SectionCard
+            title="Completed"
+            subtitle={`${completed.length} total · ₦${todayEarnings}`}
+            right={completed.length > 0 && (
+              <Link to="/rider/earnings" className="text-xs font-bold text-emerald-600 hover:text-emerald-500">
+                View earnings
+              </Link>
+            )}
+          >
+            <CompletedList completed={completed} />
           </SectionCard>
         </aside>
 

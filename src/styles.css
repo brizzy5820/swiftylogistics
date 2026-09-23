@@ -530,3 +530,111 @@
 
 /* Ensure lucide icons inherit current color so they don't show color */
 .admin-dark svg.lucide { color: currentColor; }
+
+/* ───────────────────────────────────────────────────────────────────────
+   Live map overlays: address pin labels, the centred ETA/distance chip,
+   and the animated rider car. Rendered via Google Maps OverlayView, so the
+   host elements are positioned with `left`/`top` in map pixels.
+   ─────────────────────────────────────────────────────────────────────── */
+
+/* Address pill anchored above each pickup/dropoff pin. */
+.swifty-pin-label {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 46px));
+  pointer-events: none;
+  z-index: 5;
+  max-width: min(46vw, 240px);
+}
+.swifty-pin-label > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.25);
+}
+.swifty-pin-label--pickup > span {
+  background: #10b981;
+}
+.swifty-pin-label--dropoff > span {
+  background: #ef4444;
+}
+@media (max-width: 640px) {
+  .swifty-pin-label { max-width: min(58vw, 200px); }
+  .swifty-pin-label > span { font-size: 10px; padding: 4px 9px; }
+}
+
+/* Time + distance chip pinned to the centre of the route line. */
+.swifty-route-chip-wrap {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 6;
+}
+.swifty-route-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.97);
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.22);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+.swifty-route-chip strong { color: #10b981; font-weight: 800; }
+.swifty-route-chip .dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+@media (max-width: 640px) {
+  .swifty-route-chip { font-size: 11px; padding: 4px 9px; gap: 6px; }
+}
+
+/* Animated rider car, rotating to face its heading via --car-rot. */
+.swifty-car-overlay {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 12;
+  pointer-events: none;
+}
+.swifty-car {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  transform: rotate(var(--car-rot, 0deg));
+  transition: transform 0.9s linear;
+}
+.swifty-car__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.18);
+  animation: swifty-car-pulse 2s ease-out infinite;
+}
+.swifty-car__icon {
+  position: relative;
+  filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.35));
+}
+@keyframes swifty-car-pulse {
+  0% { transform: scale(0.7); opacity: 0.85; }
+  70% { transform: scale(1.25); opacity: 0; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .swifty-car { transition: none; }
+  .swifty-car__ring { animation: none; }
+}
