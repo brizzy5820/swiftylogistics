@@ -148,7 +148,7 @@ export default function Account() {
         )}
 
         {!activeSection ? (
-          <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <section className="rounded-2xl border border-slate-100 bg-white ">
             <div className="border-b border-slate-100 px-5 py-5">
               <div className="flex items-center gap-3">
                 <div className="relative h-12 w-12 shrink-0">

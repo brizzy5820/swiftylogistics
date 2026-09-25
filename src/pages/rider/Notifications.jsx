@@ -118,32 +118,19 @@ export default function RiderNotifications() {
   }
 
   return (
-    <AppShell>
+    <AppShell hideMobileHeader>
       <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
-        <button
-          type="button"
-          onClick={handleBack}
-          aria-label="Go back"
-          className="mb-5 inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-
-        <div className="mb-6 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Notifications</p>
-            <h1 className="text-2xl font-bold text-slate-900">Rider activity</h1>
-          </div>
-          {(notifications.length > 0 || paymentIncomplete) && (
+          <div className='flex gap-3 item-center'>
             <button
               type="button"
-              onClick={markAllRead}
-              className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-900 shadow-sm transition hover:bg-emerald-50"
+              onClick={handleBack}
+              aria-label="Go back"
+              className=" inline-flex  items-center justify-center rounded-full  text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
             >
-              Read all
-            </button>
-          )}
-        </div>
+              <ArrowLeft className="h-6 w-6" />
+            </button>{" "}
+            <h1 className="text-2xl font-bold text-slate-900">Notification</h1>
+          </div>
 
         {paymentIncomplete && (
           <Link

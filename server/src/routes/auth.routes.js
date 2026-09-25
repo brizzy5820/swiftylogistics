@@ -1,5 +1,5 @@
 import express from "express";
-import { register, login, me, updatePassword } from "../controllers/auth.controller.js";
+import { register, login, me, updatePassword, socialLogin } from "../controllers/auth.controller.js";
 import validate from "../middleware/validate.js";
 import { protect } from "../middleware/authMIddleware.js";
 import { registerSchema, loginSchema, changePasswordSchema } from "../validators/auth.validator.js";
@@ -16,6 +16,10 @@ router.post(
   "/login",
   validate(loginSchema),
   asyncHandler(login)
+);
+router.post(
+  "/social",
+  asyncHandler(socialLogin)
 );
 router.get(
   "/me",

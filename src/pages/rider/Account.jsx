@@ -109,7 +109,7 @@ export default function RiderAccount() {
   const paymentIncomplete = isPaymentIncomplete(accountUser)
 
   return (
-    <AppShell>
+    <AppShell hideMobileHeader>
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
        
 

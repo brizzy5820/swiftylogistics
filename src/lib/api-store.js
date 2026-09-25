@@ -66,7 +66,7 @@ function mapTicket(ticket) {
   return { ...ticket, id: ticket._id || ticket.id, customerName: customer?.name || ticket.customerName, messages: ticket.replies || ticket.messages || [], createdAt: ticket.createdAt ? new Date(ticket.createdAt).getTime() : Date.now() }
 }
 
-function mapOrder(order) {
+export function mapOrder(order) {
   if (!order) return order
   const customer = order.customer && typeof order.customer === 'object' ? order.customer : null
   const rider = order.rider && typeof order.rider === 'object' ? order.rider : null
@@ -83,10 +83,11 @@ function mapOrder(order) {
   }
 }
 
-function upsertDelivery(mapped) {
-  const exists = store.deliveries.some((d) => d.id === mapped.id)
+export function upsertDelivery(mapped) {
+  if (!mapped || !mapped.id) return
+  const exists = store.deliveries.some((d) => String(d.id) === String(mapped.id))
   store.deliveries = exists
-    ? store.deliveries.map((d) => (d.id === mapped.id ? mapped : d))
+    ? store.deliveries.map((d) => (String(d.id) === String(mapped.id) ? mapped : d))
     : [mapped, ...store.deliveries]
   store.scheduled = store.deliveries.filter((item) => item.status === 'scheduled')
 }
@@ -230,6 +231,19 @@ export async function signIn(email, password) {
   return data.user
 }
 
+export async function signInWithSocial(provider, idToken, role) {
+  const data = await api.socialAuth({ provider, idToken, role })
+  api.setToken(data.accessToken)
+  store.session = { userId: data.user.id || data.user._id, role: data.user.role }
+  store.users = [data.user]
+  store.hydrated = false
+  store.hydrateFailed = false
+  clearSessionFlags()
+  emit()
+  await hydrate()
+  return data.user
+}
+
 export async function signUp(name, email, role, details = {}) {
   const data = await api.register({ name, email, password: details.password, phone: details.phone, role })
   api.setToken(data.accessToken)
@@ -354,7 +368,12 @@ export async function updateDeliveryStatus(id, status) {
   } else {
     throw new Error('Only an assigned rider or administrator can update this status')
   }
-  const order = mapOrder(data.delivery || data.ride || data.order); store.deliveries = store.deliveries.map((d) => d.id === id ? order : d); emit(); return order
+  const order = mapOrder(data?.delivery || data?.ride || data?.order || data?.job)
+  if (order) {
+    upsertDelivery(order)
+    emit()
+  }
+  return order
 }
 // Customer confirms the assigned rider/ride from the track page. This is
 // the gate a rider's "Start trip" button waits on — see updateDeliveryStatus

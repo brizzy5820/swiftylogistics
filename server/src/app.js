@@ -14,7 +14,7 @@ import rideRoutes from "./routes/ride.routes.js";
 const app = express();
 
 const corsOptions = {
-  origin: "*", // allow every origin (universal)
+  origin: process.env.CLIENT_URL,
   methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: false,

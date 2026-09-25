@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   MapPin, ArrowLeft, ArrowRight,
-  CheckCircle2, ArrowLeftRight, Navigation, AlertTriangle, Radio,
-  X, ChevronLeftIcon
+  CheckCircle2, ArrowLeftRight, Navigation, AlertTriangle, Radio, ChevronLeftIcon,
+  X,
 } from 'lucide-react'
+import { DeliveryMap } from '../../components/delivery-map'
+import { ADDRESS_SUGGESTIONS, fetchLagosSuggestions, resolveAddressCoords} from '../../lib/address-suggestions'
 import { AppShell } from '@/components/app-shell'
 import { MobileRouteMap, RouteMapPanel } from '@/components/mobile-route-map'
 import { RiderSearchDrawer, SEARCH_COUNTDOWN_MS } from '@/components/rider-search-drawer'
@@ -12,6 +14,7 @@ import { useRequireAuth } from '@/lib/use-require-auth'
 import { createDelivery, updateDeliveryStatus, useStore } from '@/lib/api-store'
 import { getErrorMessage } from '@/services/api'
 import { reverseGeocode } from '@/lib/address-suggestions'
+import { useSimulatedCourierPosition } from '@/lib/use-simulated-courier'
 
 const SEARCH_TIMEOUT_MS = 60000
 
@@ -139,15 +142,7 @@ const SEARCH_TIMEOUT_MS = 60000
     </div>
   )
 }
-/* ─── Static data ────────────────────────────────────────────────────── */
-const ADDRESS_SUGGESTIONS = [
-  { label: 'Lekki Phase 1',   coords: { lat: 6.4328, lng: 3.4382 } },
-  { label: 'Victoria Island', coords: { lat: 6.4270, lng: 3.4300 } },
-  { label: 'Ikeja City Mall', coords: { lat: 6.5964, lng: 3.3426 } },
-  { label: 'Yaba Tech',       coords: { lat: 6.5058, lng: 3.3799 } },
-  { label: 'Surulere',        coords: { lat: 6.4923, lng: 3.3652 } },
-  { label: 'Magodo Estate',   coords: { lat: 6.6100, lng: 3.3420 } },
-]
+
 
 const PACKAGE_TYPES = [
   { id: 'Express', label: 'Express', desc: 'Fastest delivery', image: '/sedan.png', surcharge: 4, accent: '#eab308' },
@@ -172,31 +167,10 @@ function resolveCoords(label, fallback) {
   return match ? match.coords : fallback
 }
 
-async function fetchLagosSuggestions(query, signal) {
-  if (!query.trim() || query.trim().length < 2) {
-    return ADDRESS_SUGGESTIONS
-  }
-
-  const viewbox = [2.60, 6.80, 4.00, 5.10].join(',')
-  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=8&countrycodes=ng&viewbox=${viewbox}&bounded=1&q=${encodeURIComponent(query)}`
-
-  try {
-    const response = await fetch(url, {
-      headers: { 'Accept-Language': 'en' },
-      signal,
-    })
-    if (!response.ok) throw new Error('Search failed')
-    const items = await response.json()
-    return items.map((item) => ({
-      label: item.display_name,
-      coords: { lat: Number(item.lat), lng: Number(item.lon) },
-    }))
-  } catch (error) {
-    return ADDRESS_SUGGESTIONS
-  }
-}
 
 function haversine(a, b) {
+  if (!a || !b) return 0
+
   const R = 6371
   const dLat = ((b.lat - a.lat) * Math.PI) / 180
   const dLng = ((b.lng - a.lng) * Math.PI) / 180
@@ -391,17 +365,17 @@ function weightMeta(w) {
 export default function Book() {
   const user = useRequireAuth('customer')
   const navigate = useNavigate()
-
+  const intent = location.state || {}
   /* form state */
   const [step, setStep]               = useState(0)
-  const [pickupQuery, setPickupQuery] = useState('')
-  const [dropoffQuery, setDropoffQuery] = useState('')
-  const [pickupCoords, setPickupCoords] = useState({ lat: 6.4328, lng: 3.4382 })
-  const [dropoffCoords, setDropoffCoords] = useState({ lat: 6.4270, lng: 3.4300 })
-  const [confirmedPickup, setConfirmedPickup]   = useState('Lekki Phase 1')
-  const [confirmedDropoff, setConfirmedDropoff] = useState('Victoria Island')
-  const [showPickupDrop, setShowPickupDrop]   = useState(false)
-  const [showDropoffDrop, setShowDropoffDrop] = useState(false)
+  const [pickupQuery, setPickupQuery] = useState(intent.pickup || '')
+  const [dropoffQuery, setDropoffQuery] = useState(intent.dropoff || '')
+  const [pickupCoords, setPickupCoords] = useState(intent.pickupCoords || null)
+  const [dropoffCoords, setDropoffCoords] = useState(intent.dropoffCoords || null)
+  const [confirmedPickup, setConfirmedPickup]   = useState('')
+  const [confirmedDropoff, setConfirmedDropoff] = useState('')
+  const [showPickupDrop, setShowPickupDrop]   = useState(intent.pickupCoords || null)
+  const [showDropoffDrop, setShowDropoffDrop] = useState(intent.dropoffCoords || null)
   const [pickupSuggestions, setPickupSuggestions] = useState(ADDRESS_SUGGESTIONS)
   const [dropoffSuggestions, setDropoffSuggestions] = useState(ADDRESS_SUGGESTIONS)
   const [pkg, setPkg]     = useState('Express')
@@ -422,7 +396,7 @@ export default function Book() {
   const activeDelivery = user
     ? deliveriesRaw.find((d) => d.customerId === user.id && (d.type === 'delivery' || !d.type) && !['delivered', 'cancelled'].includes(d.status)) || null
     : null
-  const liveCourier = activeDelivery?.courierPosition || null
+  const { position: liveCourier } = useSimulatedCourierPosition(activeDelivery)
   const liveRider = activeDelivery?.riderId ? usersRaw.find((u) => u.id === activeDelivery.riderId) : null
 
   /* rider search — shown after "Confirm booking" instead of navigating
@@ -436,7 +410,8 @@ export default function Book() {
   const [timedOut, setTimedOut] = useState(false)
   const [searchCountdown, setSearchCountdown] = useState(SEARCH_COUNTDOWN_MS / 1000)
   const [sheetOffsetPx, setSheetOffsetPx] = useState(0)
-  const handleSheetHeightChange = useCallback((px) => setSheetOffsetPx(px), [])
+    const [sheetDragging, setSheetDragging] = useState(false)
+  const handleSheetHeightChange = useCallback((px, dragging = true) =>{ setSheetOffsetPx(px),   setSheetDragging(Boolean(dragging))}, [])
   const watchedDelivery = searchingDeliveryId ? deliveriesRaw.find((d) => d.id === searchingDeliveryId) : null
 
   useEffect(() => {
@@ -569,7 +544,7 @@ export default function Book() {
   const routeValid   = pickupQuery.trim() && dropoffQuery.trim() &&
                        pickupQuery.trim().toLowerCase() !== dropoffQuery.trim().toLowerCase()
   const packageValid = weight >= 1 && weight <= 50
-  const advanceBlocked = (step === 0 && !routeValid) || (step === 1 && !packageValid)
+  const advanceBlocked = (step === 1 && !routeValid) || (step === 1 && !packageValid)
 
   if (!user) return null
 
@@ -603,15 +578,15 @@ export default function Book() {
     }
   }
 
-  function swapAddresses() {
-    const pq = pickupQuery, dq = dropoffQuery
-    const pc = pickupCoords, dc = dropoffCoords
-    const cp = confirmedPickup, cd = confirmedDropoff
-    setPickupQuery(dq);  setDropoffQuery(pq)
-    setPickupCoords(dc); setDropoffCoords(pc)
-    setConfirmedPickup(cd); setConfirmedDropoff(cp)
-    setShowPickupDrop(false); setShowDropoffDrop(false)
-  }
+  // function swapAddresses() {
+  //   const pq = pickupQuery, dq = dropoffQuery
+  //   const pc = pickupCoords, dc = dropoffCoords
+  //   const cp = confirmedPickup, cd = confirmedDropoff
+  //   setPickupQuery(dq);  setDropoffQuery(pq)
+  //   setPickupCoords(dc); setDropoffCoords(pc)
+  //   setConfirmedPickup(cd); setConfirmedDropoff(cp)
+  //   setShowPickupDrop(false); setShowDropoffDrop(false)
+  // }
 
   function handleAdvance() {
     if (advanceBlocked) return
@@ -621,7 +596,7 @@ export default function Book() {
       setConfirmedPickup(pickupQuery)
       setConfirmedDropoff(dropoffQuery)
     }
-    setStep((s) => Math.min(s + 1, 2))
+    setStep((s) => Math.min(s + 1, 3))
   }
 
   async function handleSubmit(e) {
@@ -728,6 +703,8 @@ export default function Book() {
       navigate('/customer')
     }
   }
+    const livePickup = pickupCoords
+  const liveDropoff = dropoffCoords
   return (
     <AppShell hideMobileHeader>
       <main className=" px-4 pb-28 lg:pt-5 sm:px-6 lg:px-8 lg:pb-8">
@@ -740,10 +717,10 @@ export default function Book() {
             <div className="min-w-0 lg:mt-5 md:mt-5  space-y-4">
     
                  {/* Back button */}
-   <div className="max-w-lg gap-3 mt-5 flex items-center">
+           <div className="max-w-lg gap-3 px-3 mt-5 flex items-center">
             {/* <p className="text-sm font-bold uppercase tracking-wider text-emerald-700">Ride with Swifty</p> */}
-            <Link to="/customer" className='lg:hidden mt-2' ><ChevronLeftIcon className='w-6 h-6'/></Link>
-            <h1 className="mt-2 font-display text-3xl font-black tracking-tight text-slate-950 sm:text-5xl">Place a delivery</h1>
+            <Link to="/customer" className='lg:hidden ' ><ChevronLeftIcon className='w-6 h-6'/></Link>
+            <h1 className=" font-display text-3xl font-black tracking-tight text-slate-950 sm:text-5xl">Place Delivery</h1>
            
           </div>
 
@@ -1032,8 +1009,8 @@ export default function Book() {
             {/* ── Right: desktop map aside ── */}
             <aside className="relative hidden lg:grid h-[50vh] sm:h-[60vh] lg:sticky lg:top-24  lg:h-[560px] ">
               <RouteMapPanel
-                pickup={activeDelivery ? activeDelivery.pickup.coords : pickupCoords}
-                dropoff={activeDelivery ? activeDelivery.dropoff.coords : dropoffCoords}
+                pickup={activeDelivery ? livePickup : pickupCoords}
+                dropoff={activeDelivery ? liveDropoff : dropoffCoords}
                 pickupAddress={activeDelivery ? activeDelivery.pickup.address : confirmedPickup}
                 dropoffAddress={activeDelivery ? activeDelivery.dropoff.address : confirmedDropoff}
                 courier={liveCourier}
@@ -1060,6 +1037,25 @@ export default function Book() {
       />
 
       {(searchingDeliveryId || matchedDelivery) && (
+        <>
+           <div
+                    className={`fixed inset-x-0 top-0 z-100 lg:hidden ${sheetDragging ? '' : 'transition-[bottom] duration-200 ease-out'}`}
+                    style={{ bottom: sheetOffsetPx }}
+                  >
+                     
+                  <DeliveryMap
+                             pickup={activeDelivery ? activeDelivery.pickup.coords : pickupCoords}
+                dropoff={activeDelivery ? activeDelivery.dropoff.coords : dropoffCoords}
+                pickupAddress={activeDelivery ? activeDelivery.pickup.address : confirmedPickup}
+                dropoffAddress={activeDelivery ? activeDelivery.dropoff.address : confirmedDropoff}
+                courier={liveCourier}
+                courierInfo={liveCourierInfo}
+                destination={activeDelivery ? activeDelivery.dropoff.coords : dropoffCoords}
+                activeLabel={activeDelivery ? `Live · ${activeDelivery.id}` : null}
+                 description={`${pickupQuery || 'Pickup'} → ${dropoffQuery || 'Dropoff'}`}
+                  className="h-full w-full"
+                  />
+                  </div>
         <RiderSearchDrawer
           rider={matchedDelivery ? liveRider || { name: matchedDelivery.riderName } : null}
           onCancel={cancelDeliverySearch}
@@ -1069,6 +1065,7 @@ export default function Book() {
           timedOut={timedOut}
           countdown={searchCountdown}
         />
+        </>
       )}
     </AppShell>
   );

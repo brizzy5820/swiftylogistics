@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ArrowLeft, Briefcase, CheckCircle2, Clock3, Hourglass, MapPin, PackageCheck, User, X } from 'lucide-react'
+import { ArrowLeft, Briefcase, CheckCircle2, Clock3, Hourglass, LoaderCircle, MapPin, PackageCheck, User, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell'
 import { DeliveryMap } from '@/components/delivery-map'
@@ -8,9 +8,10 @@ import { TripCard } from '@/components/trip-card'
 import { ChatPanel, ChatLauncher } from '@/components/chat-panel'
 import { MobileDrawer } from '@/components/mobile-drawer'
 import { useRequireAuth } from '@/lib/use-require-auth'
-import { useStore, useCurrentUser, updateDeliveryStatus, STATUS_LABEL } from '@/lib/api-store'
-import { getErrorMessage } from '@/services/api'
+import { useStore, useCurrentUser, updateDeliveryStatus, STATUS_LABEL, upsertDelivery, mapOrder } from '@/lib/api-store'
+import { getErrorMessage, getRiderJob } from '@/services/api'
 import { getSocket } from '@/lib/socket'
+import { useSimulatedCourierPosition } from '@/lib/use-simulated-courier'
 import { Skeleton, SkeletonCard } from '@/components/ui/skeleton'
 
 const NEXT = {
@@ -45,6 +46,8 @@ function RiderJobView() {
   const [dismissedRequests, setDismissedRequests] = useState(() => new Set())
   const [chatOpen, setChatOpen] = useState(false)
   const [chatUnread, setChatUnread] = useState(false)
+  const [actionBusy, setActionBusy] = useState(false)
+  const [cancelBusy, setCancelBusy] = useState(false)
   // How much of the screen the mobile job-detail sheet is occupying (real
   // measured px, reported by MobileDrawer) — the background map is pushed
   // up by exactly this much, same pattern as Ride.jsx.
@@ -67,12 +70,39 @@ function RiderJobView() {
   // unrelated store update happened to fire an emit. That's what made
   // opening a job from its card sometimes look broken until a refresh.
   const deliveries = useStore((s) => s.deliveries)
-  const delivery = deliveries.find((d) => d.id === id)
+  const delivery = deliveries.find((d) => String(d.id) === String(id))
+  const [loadingJob, setLoadingJob] = useState(false)
+  const [jobNotFound, setJobNotFound] = useState(false)
+
+  // Fallback fetch if opened directly or not yet present in store
+  useEffect(() => {
+    if (!id || delivery) return
+    let active = true
+    setLoadingJob(true)
+    getRiderJob(id)
+      .then((res) => {
+        if (!active) return
+        const fetched = res.job || res.delivery || res.order
+        if (fetched) {
+          upsertDelivery(mapOrder(fetched))
+        } else {
+          setJobNotFound(true)
+        }
+      })
+      .catch(() => {
+        if (active) setJobNotFound(true)
+      })
+      .finally(() => {
+        if (active) setLoadingJob(false)
+      })
+    return () => { active = false }
+  }, [id, delivery])
+
   const availableRequests = deliveries.filter((d) => d.status === 'pending' && (!d.riderId || d.riderId === currentUser?.id))
   const incoming = availableRequests.filter((d) => !dismissedRequests.has(d.id))
   const activeJobs = currentUser ? deliveries.filter((d) => d.riderId === currentUser.id && ['accepted', 'picked_up', 'in_transit'].includes(d.status)) : []
   const completed = user ? deliveries.filter((d) => d.riderId === user.id && d.status === 'delivered') : []
-
+ const { position: simulatedCourier, arrived: hasArrived } = useSimulatedCourierPosition(delivery)
   useEffect(() => {
     if (!delivery || delivery.status !== 'in_transit' || !autoMove) return
     let frac = 0
@@ -114,7 +144,7 @@ function RiderJobView() {
   if (!user) return null
 
   // Show skeleton while loading detail
-  if (id && detailLoading) {
+  if (id && (detailLoading || (loadingJob && !delivery))) {
     return (
       <AppShell hideMobileHeader>
         <main className="mx-auto grid max-w-7xl grid-cols-1 gap-6 p-6 lg:grid-cols-12">
@@ -142,7 +172,7 @@ function RiderJobView() {
     try {
       await updateDeliveryStatus(jobId, 'accepted')
       toast.success('Job accepted')
-      navigate('/rider/job?tab=active')
+      navigate(`/rider/job/${jobId}`)
     } catch (error) {
       toast.error(getErrorMessage(error, 'Unable to accept this job.'))
     }
@@ -161,15 +191,7 @@ function RiderJobView() {
     return (
       <AppShell hideMobileHeader>
         <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-           <button
-            type="button"
-            onClick={handleBack}
-            aria-label="Go back"
-            className="mb-5 inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button> 
-
+          
           <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <h1 className="font-display text-3xl font-bold tracking-tight text-slate-900">Jobs</h1>
@@ -236,6 +258,11 @@ function RiderJobView() {
   // instead of letting the rider tap it and get a rejected request.
   const waitingOnCustomer = delivery.status === 'picked_up' && delivery.type === 'ride' && !delivery.customerConfirmed
   const startTripBlocked = nextStep?.next === 'in_transit' && waitingOnCustomer
+  // "Mark delivered" (in_transit -> delivered) waits for the simulated
+  // drive to actually reach the dropoff — the same motion driving the car
+  // on the map — so the button can't fire before the car has arrived.
+ 
+  const deliveryBlocked = nextStep?.next === 'delivered' && !hasArrived
 
   const detailCards = (
     <>
@@ -274,37 +301,50 @@ function RiderJobView() {
                 <Hourglass className="h-3.5 w-3.5 shrink-0" /> Waiting for the customer to confirm on their track page — this unlocks automatically.
               </p>
             )}
+            {deliveryBlocked && (
+              <p className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-700">
+                <Hourglass className="h-3.5 w-3.5 shrink-0" /> Still on the way — this unlocks the moment you arrive at the dropoff.
+              </p>
+            )}
             <button
-              disabled={startTripBlocked}
+              disabled={startTripBlocked || deliveryBlocked || actionBusy}
               onClick={async () => {
+                setActionBusy(true)
                 try {
                   await updateDeliveryStatus(id, nextStep.next)
                   toast.success('Job updated')
                 } catch (error) {
                   toast.error(getErrorMessage(error, 'Unable to update this job.'))
                   return
+                } finally {
+                  setActionBusy(false)
                 }
                 if (nextStep.next === 'in_transit') setAutoMove(true)
               }}
-              className="w-full rounded-xl bg-emerald-600 py-3 font-bold text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-emerald-600"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-3 font-bold text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-emerald-600"
             >
+              {actionBusy && <LoaderCircle className="h-4 w-4 animate-spin" />}
               {nextStep.label}
             </button>
             {['accepted', 'picked_up', 'in_transit'].includes(delivery.status) && (
               <button
+                disabled={cancelBusy}
                 onClick={async () => {
                   if (!window.confirm('Are you sure you want to cancel this job?')) return
+                  setCancelBusy(true)
                   try {
                     await updateDeliveryStatus(id, 'cancelled')
                     toast.success('Job cancelled')
                     navigate('/rider/job')
                   } catch (error) {
                     toast.error(getErrorMessage(error, 'Unable to cancel this job.'))
+                  } finally {
+                    setCancelBusy(false)
                   }
                 }}
-                className="w-full flex items-center justify-center gap-2 rounded-xl border border-red-200 py-3 text-sm font-bold text-red-500 hover:bg-red-50 transition-colors"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 py-3 text-sm font-bold text-red-500 hover:bg-red-50 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <X className="h-4 w-4" /> Cancel job
+                {cancelBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />} Cancel job
               </button>
             )}
           </div>
@@ -347,7 +387,7 @@ function RiderJobView() {
           <DeliveryMap
             pickup={delivery.pickup.coords}
             dropoff={delivery.dropoff.coords}
-            courier={delivery.courierPosition}
+            courier={simulatedCourier}
             pickupAddress={delivery.pickup.address}
             dropoffAddress={delivery.dropoff.address}
             className="h-full w-full"
@@ -366,7 +406,7 @@ function RiderJobView() {
             <DeliveryMap
               pickup={delivery.pickup.coords}
               dropoff={delivery.dropoff.coords}
-              courier={delivery.courierPosition}
+              courier={simulatedCourier}
               pickupAddress={delivery.pickup.address}
               dropoffAddress={delivery.dropoff.address}
               className="h-full w-full"

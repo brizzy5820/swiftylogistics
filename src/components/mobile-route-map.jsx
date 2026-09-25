@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { DeliveryMap, API_KEY } from './delivery-map'
+import { RiderMap, OnlineBadge } from './rider-map'
 import { ShimmerImage } from './shimmer-image'
 
 // A tiny 64px floating button has no business booting the full Google Maps
@@ -16,7 +17,19 @@ function staticMapUrl(pickup, dropoff) {
   return `https://maps.googleapis.com/maps/api/staticmap?size=160x160&scale=2&maptype=roadmap&${markers}&key=${API_KEY}`
 }
 
-export function MobileRouteMap({ pickup, dropoff, courier, courierInfo, destination, pickupAddress, dropoffAddress, activeLabel, description }) {
+export function MobileRouteMap({
+  jobs,
+  onAccept,
+  pickup,
+  dropoff,
+  courier,
+  courierInfo,
+  destination,
+  pickupAddress,
+  dropoffAddress,
+  activeLabel,
+  description,
+}) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -25,14 +38,9 @@ export function MobileRouteMap({ pickup, dropoff, courier, courierInfo, destinat
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="relative h-16 w-16 overflow-hidden rounded-full border-2 border-white shadow-xl ring-2 ring-blue-300"
+          className="relative h-16 w-16 overflow-hidden rounded-full border-2 border-white shadow-xl transition-transform active:scale-95"
           aria-label="Show route map"
         >
-          <ShimmerImage
-            src={staticMapUrl(pickup, dropoff)}
-            className="pointer-events-none h-full w-full bg-slate-200"
-            imgClassName="h-full w-full object-cover"
-          />
           <div className="absolute left-1/2 top-2 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full bg-white/95 p-1 shadow-md">
             <img
               src="https://www.gstatic.com/images/branding/product/2x/maps_96dp.png"
@@ -40,24 +48,42 @@ export function MobileRouteMap({ pickup, dropoff, courier, courierInfo, destinat
               className="h-full w-full object-contain"
             />
           </div>
-          <div className="absolute inset-0 flex items-end justify-center rounded-full bg-gradient-to-t from-black/40 to-transparent pb-1.5">
-            <span className="text-[8px] font-bold uppercase tracking-widest text-white">Map</span>
+          <div className="absolute inset-0 flex items-end justify-center rounded-full pb-1.5">
+            <span className="text-[8px] font-bold uppercase tracking-widest text-black">Map</span>
           </div>
         </button>
       </div>
 
       {open && (
         <div className="fixed inset-0 z-[60] bg-slate-100 lg:hidden">
-          <DeliveryMap
-            pickup={pickup}
-            dropoff={dropoff}
-            courier={courier}
-            courierInfo={courierInfo}
-            destination={destination}
-            pickupAddress={pickupAddress}
-            dropoffAddress={dropoffAddress}
-            className="h-full w-full"
-          />
+          {jobs ? (
+            <div className="relative h-full w-full">
+              <RiderMap
+                jobs={jobs}
+                onAccept={(id) => {
+                  setOpen(false)
+                  onAccept?.(id)
+                }}
+              />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-slate-950/20 to-transparent" />
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-slate-950/25 to-transparent" />
+              <div className="absolute right-4 top-4">
+                <OnlineBadge light jobCount={jobs.length} />
+              </div>
+            </div>
+          ) : (
+            <DeliveryMap
+              pickup={pickup}
+              dropoff={dropoff}
+              courier={courier}
+              courierInfo={courierInfo}
+              destination={destination}
+              pickupAddress={pickupAddress}
+              dropoffAddress={dropoffAddress}
+              className="h-full w-full"
+            />
+          )}
+
           <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4">
             <button
               type="button"
@@ -67,11 +93,13 @@ export function MobileRouteMap({ pickup, dropoff, courier, courierInfo, destinat
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
-            <div className="max-w-[70%] truncate rounded-full bg-white/95 px-4 py-2 text-xs font-bold text-slate-800 shadow-lg backdrop-blur">
-              {activeLabel || 'Route preview'}
-            </div>
+            {!jobs && (
+              <div className="max-w-[70%] truncate rounded-full bg-white/95 px-4 py-2 text-xs font-bold text-slate-800 shadow-lg backdrop-blur">
+                {activeLabel || 'Route preview'}
+              </div>
+            )}
           </div>
-          {description && (
+          {!jobs && description && (
             <div className="absolute bottom-6 left-4 max-w-[calc(100%-2rem)] truncate rounded-full bg-white/95 px-3 py-2 text-xs font-semibold text-slate-700 shadow-lg backdrop-blur">
               {description}
             </div>

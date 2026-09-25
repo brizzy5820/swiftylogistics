@@ -42,7 +42,7 @@ export default function Earnings() {
   // Show skeleton while user data is hydrating
   if (userLoading) {
     return (
-      <AppShell>
+      <AppShell hideMobileHeader>
         <main className="p-8 max-w-6xl mx-auto">
           <SkeletonCard className="mb-8" />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -66,7 +66,7 @@ export default function Earnings() {
   }
 
   return (
-    <AppShell>
+    <AppShell hideMobileHeader>
       <main className="p-8 max-w-6xl mx-auto">
         <PageHeader title="Earnings" subtitle="Your completed trips, payouts, and withdrawals." />
 

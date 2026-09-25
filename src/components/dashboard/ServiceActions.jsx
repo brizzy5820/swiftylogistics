@@ -9,8 +9,8 @@ const ACTIONS = [
 
 const ACTIONSII = [
   { to: '/customer/ride', title: 'Ride', image: '/sedan.png' },
-  { to: '/customer/book', title: 'Delivery', image: '/delivery-man.png' },
-  { to: '/customer/track', title: 'Track', image: '/track-order.png' },
+  { to: '/customer/book', title: 'Delivery', image: '/sedan.png' },
+  { to: '/customer/track', title: 'Track', image: '/sedan.png' },
   
 ]
 
@@ -52,8 +52,8 @@ function Action({ to, title, subtitle, primary, image }) {
 // No container, no ring — just a bigger image and a label, evenly spaced.
 function MiniAction({ to, title, image }) {
   return (
-    <Link to={to} className="flex flex-1 flex-col items-center gap-2 py-1 transition active:scale-95">
-      <span className="flex h-23 w-23  bg-white p-3 rounded-full items-center justify-center">
+    <Link to={to} className="flex flex-1 flex-col items-center gap-2  transition active:scale-95">
+      <span className="flex h-23 w-23  bg-white p-3 border border-slate-200 rounded-full items-center justify-center">
         <img src={image} alt="" className="h-full w-full object-contain" />
       </span>
       <span className="text-xs font-bold text-slate-900">{title}</span>

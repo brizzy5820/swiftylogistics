@@ -611,8 +611,8 @@
 }
 .swifty-car {
   position: relative;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   transform: rotate(var(--car-rot, 0deg));
@@ -627,7 +627,7 @@
 }
 .swifty-car__icon {
   position: relative;
-  filter: drop-shadow(0 3px 6px rgba(15, 23, 42, 0.35));
+  filter: drop-shadow(0 3px 5px rgba(15, 23, 42, 0.4));
 }
 @keyframes swifty-car-pulse {
   0% { transform: scale(0.7); opacity: 0.85; }

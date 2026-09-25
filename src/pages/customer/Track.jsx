@@ -11,6 +11,7 @@ import { useStore, useCurrentUser, updateDeliveryStatus, confirmOrder, STATUS_LA
 import { getErrorMessage, getPublicTracking } from '@/services/api'
 import { getSocket } from '@/lib/socket'
 import { Skeleton, SkeletonText, SkeletonCard, SkeletonAvatar, SkeletonMap, SkeletonListItem } from '@/components/ui/skeleton'
+import { useSimulatedCourierPosition } from '@/lib/use-simulated-courier'
 
 function formatTime(ts) {
   if (!ts) return null
@@ -50,6 +51,7 @@ export default function Track() {
   const trackingId = location.state?.trackingId ?? effectiveDelivery?.trackingId ?? id
   const deliveryId = effectiveDelivery?.id
   const deliveryView = effectiveDelivery
+  const { position: simulatedCourier } = useSimulatedCourierPosition(deliveryView)
 
   // Landing on the live track page with a rider already assigned counts as
   // the customer's confirmation — this is what unlocks "Start trip" on the
@@ -533,7 +535,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
       <DeliveryMap
         pickup={deliveryView.pickup.coords}
         dropoff={deliveryView.dropoff.coords}
-        courier={deliveryView.courierPosition}
+        courier={simulatedCourier}
         courierInfo={{ riderName: deliveryView.riderName, rideType: deliveryView.rideType, phone: deliveryView.rider?.phone }}
         destination={deliveryView.dropoff.coords}
         pickupAddress={deliveryView.pickup.address}
@@ -588,7 +590,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
               <DeliveryMap
                 pickup={deliveryView.pickup.coords}
                 dropoff={deliveryView.dropoff.coords}
-                courier={deliveryView.courierPosition}
+                courier={simulatedCourier}
                 courierInfo={{ riderName: deliveryView.riderName, rideType: deliveryView.rideType, phone: deliveryView.rider?.phone }}
                 destination={deliveryView.dropoff.coords}
                 pickupAddress={deliveryView.pickup.address}

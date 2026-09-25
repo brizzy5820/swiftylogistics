@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Clock, X } from 'lucide-react'
+import { Clock, LoaderCircle, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { STATUS_LABEL, useStore } from '@/lib/api-store'
 import { cn } from '@/lib/utils'
@@ -28,14 +29,17 @@ export function TripCard({
   const d = delivery
   const navigate = useNavigate()
   const role = useStore((s) => s.session?.role)
+  const [actionBusy, setActionBusy] = useState(false)
+  const [secondaryBusy, setSecondaryBusy] = useState(false)
 
   const isDelivered = d.status === 'delivered'
   const label = actionLabel ?? (isDelivered ? 'Completed' : 'Track')
   const actionClassName = cn(
-    'shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors',
+    'shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors inline-flex items-center gap-1.5',
     isDelivered
       ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
       : 'bg-emerald-600 text-white hover:bg-emerald-500',
+    actionBusy && 'opacity-70 pointer-events-none',
   )
 
   const trackTo = actionTo ?? (role === 'rider' ? `/rider/job/${d.id}` : `/customer/track/${d.trackingId ?? d.id}`)
@@ -53,14 +57,26 @@ export function TripCard({
     navigate(trackTo)
   }
 
-  function handleActionClick(e) {
+  async function handleActionClick(e) {
     e.stopPropagation()
-    onAction?.(e)
+    if (!onAction || actionBusy) return
+    setActionBusy(true)
+    try {
+      await onAction(e)
+    } finally {
+      setActionBusy(false)
+    }
   }
 
-  function handleSecondaryClick(e) {
+  async function handleSecondaryClick(e) {
     e.stopPropagation()
-    onSecondary?.(e)
+    if (!onSecondary || secondaryBusy) return
+    setSecondaryBusy(true)
+    try {
+      await onSecondary(e)
+    } finally {
+      setSecondaryBusy(false)
+    }
   }
 
   return (
@@ -75,7 +91,7 @@ export function TripCard({
         }
       }}
       className={cn(
-        'rounded-2xl border border-slate-100 bg-white p-4 shadow-xs transition-colors',
+        'rounded-2xl border border-slate-100 bg-white p-4  transition-colors',
         disableNavigation ? 'cursor-default' : 'cursor-pointer hover:border-blue-200',
         className,
       )}
@@ -114,29 +130,44 @@ export function TripCard({
             <button
               type="button"
               onClick={handleSecondaryClick}
-              className="inline-flex items-center gap-1.5 rounded-full border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-500 transition-colors hover:bg-red-100"
+              disabled={secondaryBusy}
+              className="inline-flex items-center gap-1.5 rounded-full border border-red-100 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-500 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-70"
               aria-label={secondaryLabel}
               title={secondaryLabel}
             >
-              <X className="h-3.5 w-3.5" />
+              {secondaryBusy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
               {secondaryLabel}
             </button>
           )}
           {actionTo ? (
             <Link
               to={actionTo}
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation()
+                if (actionBusy) { e.preventDefault(); return }
                 // FIX: Ensure state modifications/fetches occur on the parent link click
-                onAction?.(e) 
+                if (onAction) {
+                  e.preventDefault()
+                  setActionBusy(true)
+                  try {
+                    await onAction(e)
+                  } finally {
+                    setActionBusy(false)
+                  }
+                  onBeforeNavigate?.()
+                  navigate(actionTo)
+                  return
+                }
                 onBeforeNavigate?.()
               }}
               className={actionClassName}
             >
+              {actionBusy && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}
               {label}
             </Link>
           ) : onAction ? (
-            <button type="button" onClick={handleActionClick} className={actionClassName}>
+            <button type="button" onClick={handleActionClick} disabled={actionBusy} className={actionClassName}>
+              {actionBusy && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}
               {label}
             </button>
           ) : null}
@@ -145,4 +176,3 @@ export function TripCard({
     </div>
   )
 }
- 

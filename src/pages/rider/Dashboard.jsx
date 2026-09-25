@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Briefcase, Star, Trophy, AlertCircle, ChevronRight, GripHorizontal, X, LoaderCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell'
@@ -7,6 +7,7 @@ import { TripCard } from '@/components/trip-card'
 import { useRequireAuth } from '@/lib/use-require-auth'
 import { useStore, updateDeliveryStatus } from '@/lib/api-store'
 import { RiderMap } from '@/components/rider-map'
+import { MobileRouteMap } from '@/components/mobile-route-map'
 import { getErrorMessage } from '@/services/api'
 
 const MAP_DEFAULT = 260
@@ -191,6 +192,7 @@ function CompletedList({ completed }) {
 
 export default function RiderDashboard() {
   const user = useRequireAuth('rider')
+  const navigate = useNavigate()
   // Mobile map reveal: starts fully hidden (0). Dragging the handle below
   // the map area grows this height live; releasing snaps to the nearest of
   // [hidden, default, max]. No more explicit "Show map" button.
@@ -229,6 +231,7 @@ export default function RiderDashboard() {
     !user?.vehicleType || !user?.plateNumber || !user?.licenseNumber || !user?.nin || !user?.bankName || !user?.accountNumber
   const showPaymentBanner = paymentIncomplete && !paymentDismissed
   const mapJobs = [...incoming, ...myJobs]
+  const routeJob = myJobs[0] || incoming[0]
 
   useEffect(() => {
     if (!user) return undefined
@@ -255,6 +258,7 @@ export default function RiderDashboard() {
         return next
       })
       toast.success('Job accepted')
+      navigate(`/rider/job/${id}`)
     } catch (error) {
       toast.error(getErrorMessage(error, 'Unable to accept this job.'))
     }
@@ -291,6 +295,44 @@ export default function RiderDashboard() {
     setMapHeight((current) => MAP_SNAPS.reduce((closest, point) =>
       Math.abs(point - current) < Math.abs(closest - current) ? point : closest, MAP_SNAPS[0]))
   }, [mapDragging])
+
+  // Same gesture, extended to the page body itself — not just the handle
+  // strip — so dragging down anywhere on the content also reveals the map.
+  // Gated on two things so it never fights normal scrolling or taps:
+  //  1. Only armed when the page is already scrolled to the very top
+  //     (there's nothing above to scroll to at that point anyway).
+  //  2. Only "captured" as a map-drag once the pointer has moved past a
+  //     small threshold — a plain tap or an upward scroll never triggers it.
+  const bodyDragRef = useRef(null)
+
+  const handleBodyDragStart = useCallback((event) => {
+    if (window.scrollY > 4) return
+    bodyDragRef.current = { startY: event.clientY, startHeight: mapHeight, armed: false }
+  }, [mapHeight])
+
+  const handleBodyDragMove = useCallback((event) => {
+    const state = bodyDragRef.current
+    if (!state) return
+    const delta = event.clientY - state.startY
+    if (!state.armed) {
+      if (delta > 8) {
+        state.armed = true
+        setMapDragging(true)
+      } else {
+        return
+      }
+    }
+    setMapHeight(clampMapHeight(state.startHeight + delta))
+  }, [])
+
+  const handleBodyDragEnd = useCallback(() => {
+    const state = bodyDragRef.current
+    bodyDragRef.current = null
+    if (!state?.armed) return
+    setMapDragging(false)
+    setMapHeight((current) => MAP_SNAPS.reduce((closest, point) =>
+      Math.abs(point - current) < Math.abs(closest - current) ? point : closest, MAP_SNAPS[0]))
+  }, [])
 
   const showMap = mapHeight > 20
 
@@ -389,6 +431,10 @@ export default function RiderDashboard() {
 
       {/* ================= MOBILE ================= */}
       <div className="md:hidden">
+        <MobileRouteMap
+          jobs={mapJobs}
+          onAccept={accept}
+        />
         <div
           className="relative overflow-hidden bg-slate-100"
           style={{ height: mapHeight, transition: mapDragging ? 'none' : 'height 0.28s cubic-bezier(0.32, 0.72, 0, 1)' }}
@@ -417,7 +463,14 @@ export default function RiderDashboard() {
           {showMap ? 'Drag to hide map' : 'Drag down for map'}
         </div>
 
-        <div className="space-y-4 p-4">
+        <div
+          className="space-y-4 p-4"
+          style={{ touchAction: 'pan-y', overscrollBehaviorY: 'contain' }}
+          onPointerDown={handleBodyDragStart}
+          onPointerMove={handleBodyDragMove}
+          onPointerUp={handleBodyDragEnd}
+          onPointerCancel={handleBodyDragEnd}
+        >
           {showPaymentBanner && <PaymentBanner onDismiss={() => setPaymentDismissed(true)} />}
 
           <GreetingEarningsCard name={firstName} amount={todayEarnings} count={completed.length} />

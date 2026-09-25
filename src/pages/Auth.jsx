@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import {
   Mail,
@@ -18,8 +18,9 @@ import {
   X,
   LoaderCircle,
 } from 'lucide-react'
-import { signIn, ensureSession, signUp, updateCurrentUser, VEHICLE_TYPES } from '@/lib/api-store'
+import { signIn, signInWithSocial, ensureSession, signUp, updateCurrentUser, VEHICLE_TYPES } from '@/lib/api-store'
 import { getErrorMessage } from '@/services/api'
+import SocialAuthButtons from '@/components/SocialAuthButtons'
 
 // A single labeled input row. The border goes emerald on focus via
 // focus-within, so it works whether the child is an <input> or <select>.
@@ -50,12 +51,14 @@ export default function Auth() {
 
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
+  const [isSigningIn, setIsSigningIn] = useState(false)
 
   const [name, setName] = useState('')
   const [signupEmail, setSignupEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [signupPassword, setSignupPassword] = useState('')
   const [isSigningUp, setIsSigningUp] = useState(false)
+  const [isSavingDetails, setIsSavingDetails] = useState(false)
 
   const [vehicleType, setVehicleType] = useState('')
   const [vehicleColor, setVehicleColor] = useState('')
@@ -64,6 +67,8 @@ export default function Auth() {
   const [nin, setNin] = useState('')
   const [bankName, setBankName] = useState('')
   const [accountNumber, setAccountNumber] = useState('')
+
+  const [socialLoading, setSocialLoading] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -75,6 +80,73 @@ export default function Auth() {
     return () => { active = false }
   }, [navigate])
 
+  // Load Google Identity Services script and initialise once it's ready
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+
+  const handleGoogleCredential = useCallback(
+    async (response) => {
+      setSocialLoading(true)
+      setError('')
+      try {
+        const user = await signInWithSocial('google', response.credential, role)
+        const fallback = user.role === 'admin' ? '/admin' : user.role === 'rider' ? '/rider' : '/customer'
+        navigate(state?.from || fallback, { replace: true, state: state?.intent ?? null })
+      } catch (err) {
+        setError(getErrorMessage(err, 'Google sign-in failed. Please try again.'))
+      } finally {
+        setSocialLoading(false)
+      }
+    },
+    [navigate, role, state]
+  )
+
+  useEffect(() => {
+    if (!googleClientId) return
+    const scriptId = 'google-gsi-script'
+    if (!document.getElementById(scriptId)) {
+      const script = document.createElement('script')
+      script.id = scriptId
+      script.src = 'https://accounts.google.com/gsi/client'
+      script.async = true
+      script.defer = true
+      document.head.appendChild(script)
+    }
+    const init = () => {
+      if (!window.google?.accounts?.id) return
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: handleGoogleCredential,
+        auto_select: false,
+        cancel_on_tap_outside: true,
+      })
+    }
+    // Script may already be loaded (e.g. hot-reload)
+    if (window.google?.accounts?.id) {
+      init()
+    } else {
+      const existing = document.getElementById(scriptId)
+      existing.addEventListener('load', init)
+      return () => existing.removeEventListener('load', init)
+    }
+  }, [googleClientId, handleGoogleCredential])
+
+  function triggerGoogleSignIn() {
+    if (!window.google?.accounts?.id) {
+      setError('Google Sign-In is not available. Please check your internet connection.')
+      return
+    }
+    setSocialLoading(true)
+    window.google.accounts.id.prompt((notification) => {
+      if (
+        notification.isNotDisplayed?.() ||
+        notification.isSkippedMoment?.() ||
+        notification.isDismissedMoment?.()
+      ) {
+        setSocialLoading(false)
+      }
+    })
+  }
+
   function switchTab(t) {
     setTab(t)
     setSignupStep(1)
@@ -84,7 +156,9 @@ export default function Auth() {
 
   async function handleLogin(e) {
     e.preventDefault()
+    if (isSigningIn) return
     setError('')
+    setIsSigningIn(true)
     try {
       const user = await signIn(loginEmail, loginPassword)
       if (!user) throw new Error('Invalid email or password')
@@ -92,9 +166,9 @@ export default function Auth() {
       navigate(state?.from || fallback, { replace: true, state: state?.intent ?? null })
     } catch (error) {
       setError(getErrorMessage(error, 'Invalid email or password. Please try again.'))
+    } finally {
+      setIsSigningIn(false)
     }
-    return
-
   }
 
   async function handleGeneralSubmit(e) {
@@ -123,7 +197,9 @@ export default function Auth() {
 
   async function handlePaymentSubmit(e) {
     e.preventDefault()
+    if (isSavingDetails) return
     setError('')
+    setIsSavingDetails(true)
     const details = {}
     if (vehicleType) details.vehicleType = vehicleType
     if (vehicleColor.trim()) details.vehicleColor = vehicleColor.trim()
@@ -137,9 +213,11 @@ export default function Auth() {
         await updateCurrentUser(details)
       } catch (error) {
         setError(getErrorMessage(error, 'Unable to save rider details.'))
+        setIsSavingDetails(false)
         return
       }
     }
+    setIsSavingDetails(false)
     navigate(state?.from || '/rider', { replace: true, state: state?.intent ?? null })
   }
 
@@ -241,6 +319,9 @@ export default function Auth() {
 
             {tab === 'login' ? (
               <form onSubmit={handleLogin} className="mt-5 flex flex-col gap-4">
+                {googleClientId && (
+                  <SocialAuthButtons onGoogle={triggerGoogleSignIn} loading={socialLoading} />
+                )}
                 <FormField icon={Mail} label="Email">
                   <input
                     type="email"
@@ -270,9 +351,11 @@ export default function Auth() {
 
                 <button
                   type="submit"
-                  className="mt-1 w-full rounded-xl bg-brand py-3.5 text-sm font-semibold text-white transition-colors hover:bg-brand-hover"
+                  disabled={isSigningIn}
+                  className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl bg-brand py-3.5 text-sm font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  Login
+                  {isSigningIn && <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                  {isSigningIn ? 'Signing in...' : 'Login'}
                 </button>
               </form>
             ) : role === 'rider' && signupStep === 2 ? (
@@ -352,9 +435,11 @@ export default function Auth() {
 
                 <button
                   type="submit"
-                  className="mt-1 w-full rounded-xl bg-brand py-3.5 text-sm font-semibold text-white transition-colors hover:bg-brand-hover"
+                  disabled={isSavingDetails}
+                  className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl bg-brand py-3.5 text-sm font-semibold text-white transition-colors hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  Save &amp; finish
+                  {isSavingDetails && <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                  {isSavingDetails ? 'Saving...' : 'Save & finish'}
                 </button>
                 <button
                   type="button"
@@ -366,6 +451,9 @@ export default function Auth() {
               </form>
             ) : (
               <form onSubmit={handleGeneralSubmit} className="mt-5 flex flex-col gap-4">
+                {googleClientId && (
+                  <SocialAuthButtons onGoogle={triggerGoogleSignIn} loading={socialLoading} />
+                )}
                 <FormField icon={User} label="Full name">
                   <input
                     type="text"

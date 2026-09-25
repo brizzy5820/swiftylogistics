@@ -143,7 +143,7 @@ export default function CustomerDashboard() {
       <section className={recent.length > 0 ? 'mt-4' : 'mt-8'}>
         <div className="mb-3 flex items-center justify-between">
           <p className="font-display text-lg font-bold">Suggestions</p>
-          <Link to="/customers/actions" className="flex items-center gap-1 text-sm font-bold text-emerald-700">
+          <Link to="/customer/actions" className="flex items-center gap-1 text-sm font-bold text-emerald-700">
             See all <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>

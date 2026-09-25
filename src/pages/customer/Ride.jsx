@@ -4,6 +4,7 @@ import { ArrowLeft, CarFront, Check, Navigation, Users,User, Clock3, X, ArrowRig
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { AppShell } from '../../components/app-shell'
 import { DeliveryMap } from '../../components/delivery-map'
+import { MobileRouteMap } from '../../components/mobile-route-map'
 import { MobileDrawer } from '../../components/mobile-drawer'
 import { RiderSearchDrawer, SEARCH_COUNTDOWN_MS } from '../../components/rider-search-drawer'
 import { useRequireAuth } from '../../lib/use-require-auth'
@@ -12,6 +13,7 @@ import { getErrorMessage } from '../../services/api'
 import { RIDE_OPTIONS } from '../../data/app-data'
 import { ADDRESS_SUGGESTIONS, fetchLagosSuggestions, resolveAddressCoords, reverseGeocode } from '../../lib/address-suggestions'
 import { haversineKm } from '../../components/delivery-map'
+import { useSimulatedCourierPosition } from '../../lib/use-simulated-courier'
 
 
 const LAGOS = { lat: 6.5244, lng: 3.3792 }
@@ -244,7 +246,7 @@ export default function Ride() {
   // Live, in-progress ride for this customer — drives the live map.
 const [activeRide, setActiveRide] = useState(null)
 
-  const liveCourier = activeRide?.courierPosition || null
+  const { position: liveCourier } = useSimulatedCourierPosition(activeRide)
   const livePickup = pickupCoords
   const liveDropoff = dropoffCoords
 const liveRider = activeRide?.rider || null
@@ -522,15 +524,16 @@ function confirmMatchedRide() {
 
   return (
     <AppShell hideMobileHeader>
-      <main className="mx-auto flex flex-col gap-6  md:py-3 px-4 py-5 lg:mt-4   sm:px-6 lg:grid lg:grid-cols-2 ">
+      <main className="mx-auto flex flex-col gap-6 px-4 py-6 lg:mt-4 md:mt-4 sm:px-6 lg:grid lg:grid-cols-2 ">
         {/* Left: route form */}
         <section className="overflow-visible rounded-3xl md:px-3 sm:p-8">
-            <div className="max-w-lg gap-3  flex items-center">
-              {/* <p className="text-sm font-bold uppercase tracking-wider text-emerald-700">Ride with Swifty</p> */}
-              <Link to="/customer" className='lg:hidden mt-2' ><ChevronLeftIcon className='w-6 h-6'/></Link>
-              <h1 className="mt-2 font-display text-3xl font-black tracking-tight text-slate-950 sm:text-5xl">Let's Ride</h1>
-            
-            </div>
+           <div className="max-w-lg gap-3  flex items-center">
+            {/* <p className="text-sm font-bold uppercase tracking-wider text-emerald-700">Ride with Swifty</p> */}
+            <Link to="/customer" className='lg:hidden mt-2' ><ChevronLeftIcon className='w-6 h-6'/></Link>
+            <h1 className="mt-2 font-display text-3xl font-black tracking-tight text-slate-950 sm:text-5xl">Let's Ride</h1>
+           
+          </div>
+
 
           <div className="relative z-20 mt-8 overflow-visible rounded-2xl bg-white p-4 shadow-sm" style={{ overflow: 'visible' }}>
             <div className="relative space-y-6" style={{ overflow: 'visible' }}>
@@ -577,6 +580,20 @@ function confirmMatchedRide() {
           />
         </section>
       </main>
+
+      {!showModal && !searchingRideId && !matchedRider && (
+        <MobileRouteMap
+          pickup={activeRide ? livePickup : pickupCoords}
+          dropoff={activeRide ? liveDropoff : dropoffCoords}
+          courier={liveCourier}
+          courierInfo={liveCourierInfo}
+          destination={activeRide ? activeRide.dropoff.coords : dropoffCoords}
+          pickupAddress={activeRide ? activeRide.pickup?.address : pickup}
+          dropoffAddress={activeRide ? activeRide.dropoff?.address : dropoff}
+          activeLabel={activeRide ? `Live · ${activeRide.id}` : 'Route preview'}
+          description={`${pickup || 'Pickup'} → ${dropoff || 'Dropoff'}`}
+        />
+      )}
 
       {/* Mobile confirmation: a single persistent map, pushed up by whichever
           sheet is currently open, so pickup/dropoff markers stay visible

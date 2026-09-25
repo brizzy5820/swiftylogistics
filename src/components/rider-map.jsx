@@ -12,6 +12,30 @@ function jobPinSvg(color, label) {
   return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg)
 }
 
+export function OnlineBadge({ light, jobCount }) {
+  return (
+    <div
+      className={
+        'flex items-center gap-2 rounded-full border px-3 py-1.5 shadow-sm ' +
+        (light ? 'border-white/20 bg-black/35 backdrop-blur-md' : 'border-slate-200 bg-slate-50')
+      }
+    >
+      <div className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+      <span className={'text-xs font-bold uppercase tracking-wider ' + (light ? 'text-white' : 'text-slate-600')}>
+        Online
+      </span>
+      {typeof jobCount === 'number' && (
+        <>
+          <span className={'h-3 w-px ' + (light ? 'bg-white/30' : 'bg-slate-300')} />
+          <span className={'text-xs font-bold ' + (light ? 'text-white' : 'text-slate-600')}>
+            {jobCount} nearby
+          </span>
+        </>
+      )}
+    </div>
+  )
+}
+
 /**
  * RiderMap — overview map for the rider with a pin per available job.
  * Clicking a pin opens details; pending jobs include an "Accept" button.
@@ -25,6 +49,7 @@ export function RiderMap({ jobs = [], onAccept }) {
   const markersRef = useRef([])
   const infoRef = useRef(null)
   const initializedRef = useRef(false)
+  const resizeObserverRef = useRef(null)
   const onAcceptRef = useRef(onAccept)
   const [error, setError] = useState(null)
 
@@ -59,10 +84,23 @@ export function RiderMap({ jobs = [], onAccept }) {
         infoRef.current = new G.InfoWindow()
         mapRef.current = map
         initializedRef.current = true
+        resizeObserverRef.current = new ResizeObserver(() => {
+          window.requestAnimationFrame(() => {
+            if (mapRef.current) G.event.trigger(mapRef.current, 'resize')
+          })
+        })
+        resizeObserverRef.current.observe(containerRef.current)
       })
       .catch((e) => setError(e.message))
 
-    return () => { cancelled = true; mapRef.current = null; initializedRef.current = false; infoRef.current = null }
+    return () => {
+      cancelled = true
+      resizeObserverRef.current?.disconnect()
+      resizeObserverRef.current = null
+      mapRef.current = null
+      initializedRef.current = false
+      infoRef.current = null
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Live: update job markers whenever jobs array changes
@@ -105,7 +143,7 @@ export function RiderMap({ jobs = [], onAccept }) {
       const customer = job.customerName || 'Customer'
 
       const acceptButton = isPending
-        ? `<button id="sw-accept" style="margin-top:8px;width:100%;padding:8px 10px;border:0;border-radius:10px;background:#16a34a;color:#fff;font-weight:700;font-size:12px;cursor:pointer">Accept ${job.type === 'ride' ? 'ride' : 'delivery'}</button>`
+        ? `<button id="sw-accept-${job.id}" style="margin-top:8px;width:100%;padding:8px 10px;border:0;border-radius:10px;background:#16a34a;color:#fff;font-weight:700;font-size:12px;cursor:pointer">Accept ${job.type === 'ride' ? 'ride' : 'delivery'}</button>`
         : ''
 
       const content = `
@@ -125,7 +163,7 @@ export function RiderMap({ jobs = [], onAccept }) {
         infoRef.current.open({ anchor: marker, map })
         if (isPending) {
           G.event.addListenerOnce(infoRef.current, 'domready', () => {
-            const btn = document.getElementById('sw-accept')
+            const btn = document.getElementById(`sw-accept-${job.id}`)
             if (btn) btn.onclick = () => onAcceptRef.current?.(job.id)
           })
         }
@@ -139,6 +177,10 @@ export function RiderMap({ jobs = [], onAccept }) {
       map.fitBounds(bounds, { top: 40, right: 40, bottom: 40, left: 40 })
       const listener = G.event.addListenerOnce(map, 'bounds_changed', () => {
         if (map.getZoom() > 14) map.setZoom(14)
+      })
+      window.requestAnimationFrame(() => {
+        G.event.trigger(map, 'resize')
+        map.fitBounds(bounds, { top: 40, right: 40, bottom: 40, left: 40 })
       })
     }
   }, [jobs])

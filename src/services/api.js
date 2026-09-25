@@ -69,6 +69,7 @@ export { request }
 
 export const register = (payload) => request('/auth/register', { method: 'POST', body: JSON.stringify(payload) })
 export const login = (payload) => request('/auth/login', { method: 'POST', body: JSON.stringify(payload) })
+export const socialAuth = (payload) => request('/auth/social', { method: 'POST', body: JSON.stringify(payload) })
 export const getMe = () => request('/auth/me')
 export const changePassword = (password) => request('/auth/password', { method: 'PATCH', body: JSON.stringify({ password }) })
 export const updateMe = (payload) => request('/users/me', { method: 'PATCH', body: JSON.stringify(payload) })

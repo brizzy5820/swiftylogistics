@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { CarFront, MapPin, Clock3, Navigation } from 'lucide-react'
 import { useStore } from '../../lib/api-store'
 import { DeliveryMap } from '../delivery-map'
+import { useSimulatedCourierPosition } from '../../lib/use-simulated-courier'
 
 export function RideTracker() {
   const user = useStore((s) => s.session ? s.users.find((u) => u.id === s.session.userId) : null)
@@ -20,7 +21,8 @@ export function RideTracker() {
   const isActive = latestRide && !['delivered', 'cancelled'].includes(latestRide.status)
   const pickup = latestRide?.pickup?.coords
   const dropoff = latestRide?.dropoff?.coords
-  const courier = isActive ? latestRide?.courierPosition : null
+  const { position: simulatedCourier } = useSimulatedCourierPosition(latestRide)
+  const courier = isActive ? simulatedCourier : null
   const rider = latestRide?.riderId ? users.find((u) => u.id === latestRide.riderId) : null
   const courierInfo = {
     riderName: latestRide?.riderName || 'Driver en route',

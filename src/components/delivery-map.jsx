@@ -56,19 +56,28 @@ function pinSvgUrl(fillColor, label) {
 }
 
 // Top-down car interface for the rider/courier. Base orientation points north
-// (up), so a bearing of 0deg reads as "heading north".
+// (up), so a bearing of 0deg reads as "heading north". Modern white-body
+// silhouette (à la Uber/Bolt map pins) rather than an abstract block.
 function carSvg() {
   return `
     <div class="swifty-car">
       <span class="swifty-car__ring"></span>
-      <svg class="swifty-car__icon" width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <rect x="7" y="2.6" width="10" height="18.8" rx="3.4" fill="${ROUTE_COLOR}"/>
-        <rect x="8.7" y="5.6" width="6.6" height="3.6" rx="1.2" fill="#ECFDF5"/>
-        <rect x="8.7" y="14.6" width="6.6" height="3.2" rx="1.2" fill="#ECFDF5"/>
-        <rect x="4.8" y="6.4" width="2.1" height="3.4" rx="1" fill="#047857"/>
-        <rect x="17.1" y="6.4" width="2.1" height="3.4" rx="1" fill="#047857"/>
-        <rect x="4.8" y="14.2" width="2.1" height="3.4" rx="1" fill="#047857"/>
-        <rect x="17.1" y="14.2" width="2.1" height="3.4" rx="1" fill="#047857"/>
+      <svg class="swifty-car__icon" width="30" height="30" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <ellipse cx="16" cy="27.4" rx="8.4" ry="2" fill="#0F172A" opacity="0.22"/>
+        <path d="M16 2.4c-3.3 0-5.4.9-6.2 3.3L8 11.4v14c0 .9.7 1.6 1.6 1.6h.9c.9 0 1.6-.7 1.6-1.6v-.9h7.8v.9c0 .9.7 1.6 1.6 1.6h.9c.9 0 1.6-.7 1.6-1.6v-14l-1.8-5.7c-.8-2.4-2.9-3.3-6.2-3.3z" fill="#F8FAFC" stroke="#CBD5E1" stroke-width="0.7"/>
+        <path d="M9.9 11.9c.5-2.5 1.3-4 2.1-4.8h8c.8.8 1.6 2.3 2.1 4.8H9.9z" fill="#111827"/>
+        <rect x="10.8" y="13.2" width="10.4" height="8.4" rx="1.8" fill="#E2E8F0"/>
+        <rect x="13.2" y="15.2" width="5.6" height="0.9" rx="0.45" fill="#94A3B8"/>
+        <rect x="6.2" y="9.6" width="1.7" height="2.8" rx="0.7" fill="#64748B"/>
+        <rect x="24.1" y="9.6" width="1.7" height="2.8" rx="0.7" fill="#64748B"/>
+        <rect x="5.8" y="6.6" width="2.1" height="3.8" rx="1" fill="#0F172A"/>
+        <rect x="24.1" y="6.6" width="2.1" height="3.8" rx="1" fill="#0F172A"/>
+        <rect x="5.8" y="19.6" width="2.1" height="3.8" rx="1" fill="#0F172A"/>
+        <rect x="24.1" y="19.6" width="2.1" height="3.8" rx="1" fill="#0F172A"/>
+        <rect x="11.6" y="2.6" width="2.6" height="1.3" rx="0.6" fill="#FDE68A"/>
+        <rect x="17.8" y="2.6" width="2.6" height="1.3" rx="0.6" fill="#FDE68A"/>
+        <rect x="12.2" y="26.3" width="2.2" height="1" rx="0.4" fill="#EF4444" opacity="0.85"/>
+        <rect x="17.6" y="26.3" width="2.2" height="1" rx="0.4" fill="#EF4444" opacity="0.85"/>
       </svg>
     </div>`
 }
