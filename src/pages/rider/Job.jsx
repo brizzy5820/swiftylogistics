@@ -246,7 +246,20 @@ function RiderJobView() {
   if (!delivery) {
     return (
       <AppShell>
-        <main className="p-12 text-center text-slate-500">Job not found.</main>
+        <main className="mx-auto max-w-md p-12 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 mb-4">
+            <Briefcase className="h-6 w-6" />
+          </div>
+          <h2 className="text-lg font-bold text-slate-900">Job not found</h2>
+          <p className="mt-1 text-sm text-slate-500">The requested job could not be found or is no longer available.</p>
+          <button
+            type="button"
+            onClick={() => navigate('/rider')}
+            className="mt-6 inline-flex items-center justify-center rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500"
+          >
+            Back to Dashboard
+          </button>
+        </main>
       </AppShell>
     )
   }
