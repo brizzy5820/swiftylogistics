@@ -97,11 +97,11 @@ function EarningsCard({ amount, count }) {
 
 function GreetingEarningsCard({ name, amount, count }) {
   return (
-    <div className="rounded-2xl border border-surface-200 bg-emerald-800 text-white p-6 shadow-lg">
+    <div className="rounded-2xl  bg-emerald-800 text-white p-6">
       <p className="font-display text-lg font-bold">
         {getGreeting()}, {name}
       </p>
-      <p className="mt-4 text-xs font-bold uppercase tracking-wider text-white/60">Today&apos;s earnings</p>
+      {/* <p className="mt-4 text-xs font-bold uppercase tracking-wider text-white/60">Today&apos;s earnings</p> */}
       <p className="mt-1 font-display text-4xl font-bold">₦{amount}</p>
       <p className="mt-2 text-xs text-emerald-400 font-medium">+ {count} deliveries completed</p>
     </div>
@@ -110,19 +110,20 @@ function GreetingEarningsCard({ name, amount, count }) {
 
 function StatRow({ icon: Icon, label, value }) {
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-2 text-slate-500">
+    <div className="flex flex-col items-center justify-between">
+     
+      <div className="flex  items-center gap-2 text-slate-500">
         <Icon className="h-4 w-4 text-slate-300" />
         <p className="text-xs">{label}</p>
       </div>
-      <p className="font-display font-bold">{value}</p>
+       <p className="font-display font-bold">{value}</p>
     </div>
   )
 }
 
 function StatsCard({ activeJobs, rating, trips }) {
   return (
-    <div className="rounded-2xl border border-surface-200 bg-white p-6 shadow-sm space-y-4">
+    <div className="rounded-2xl flex justify-between  bg-gray-100 p-3 shadow-sm">
       <StatRow icon={Briefcase} label="Active jobs" value={activeJobs} />
       <StatRow icon={Star} label="Rating" value={rating} />
       <StatRow icon={Trophy} label="Total trips" value={trips} />
@@ -361,12 +362,7 @@ export default function RiderDashboard() {
 
   return (
     <AppShell>
-      {loading && (
-        <div className="mx-4 mt-6 flex items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-white p-8 text-sm text-slate-500 sm:mx-6 lg:mx-8">
-          <LoaderCircle className="h-5 w-5 animate-spin" />
-          Loading your jobs...
-        </div>
-      )}
+
       {/* Incomplete payment details modal — surfaces on first dashboard visit
           after sign-up/login when the rider hasn't filled in vehicle/verification. */}
       {paymentIncomplete && !paymentDismissed && (
@@ -457,14 +453,14 @@ export default function RiderDashboard() {
           onPointerMove={handleMapDragMove}
           onPointerUp={handleMapDragEnd}
           onPointerCancel={handleMapDragEnd}
-          className="flex touch-none cursor-grab select-none items-center justify-center gap-2 border-b border-slate-200 bg-white py-2 text-2xs font-bold uppercase tracking-wider text-slate-400 active:cursor-grabbing"
+          className="  hidden flex touch-none  cursor-grab select-none items-center justify-center gap-2 border-b border-slate-200 bg-white py-2 text-2xs font-bold uppercase tracking-wider text-slate-400 active:cursor-grabbing"
         >
           <GripHorizontal className="h-3.5 w-3.5" />
           {showMap ? 'Drag to hide map' : 'Drag down for map'}
         </div>
 
         <div
-          className="space-y-4 p-4"
+          className="space-y-4 py-1 px-3"
           style={{ touchAction: 'pan-y', overscrollBehaviorY: 'contain' }}
           onPointerDown={handleBodyDragStart}
           onPointerMove={handleBodyDragMove}

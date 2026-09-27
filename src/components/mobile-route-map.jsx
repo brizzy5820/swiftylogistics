@@ -34,11 +34,11 @@ export function MobileRouteMap({
 
   return (
     <>
-      <div className="fixed bottom-24 right-4 z-40 lg:hidden">
+      <div className="fixed bottom-24 right-4 z-40  lg:hidden">
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="relative h-16 w-16 overflow-hidden rounded-full border-2 border-white shadow-xl transition-transform active:scale-95"
+          className="relative h-16 w-16 overflow-hidden rounded-full border-2 border-white shadow-xl transition-transform bg-slate-100 active:scale-95"
           aria-label="Show route map"
         >
           <div className="absolute left-1/2 top-2 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full bg-white/95 p-1 shadow-md">
