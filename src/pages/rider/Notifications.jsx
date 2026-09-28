@@ -120,7 +120,7 @@ export default function RiderNotifications() {
   return (
     <AppShell hideMobileHeader>
       <main className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
-          <div className='flex gap-3 item-center'>
+          <div className='flex gap-3 mb-2 item-center'>
             <button
               type="button"
               onClick={handleBack}
@@ -174,7 +174,7 @@ export default function RiderNotifications() {
                       {group}
                     </p>
                   )}
-                  <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="rounded-2xl  bg-gray-100 p-4 ">
                     <div className="flex items-start gap-3">
                       <div className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${Number(item.time) > readAt ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-600'}`}>
                         {Number(item.time) > readAt && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />}
