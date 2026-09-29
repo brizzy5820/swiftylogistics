@@ -244,13 +244,13 @@ export default function Index() {
               <CarFront className="h-4 w-4" /> Ride
             </Link>
             <Link
-              to="/rider"
+             to={`${user ? '/rider' : '/auth'}`}
               className="inline-flex items-center gap-1.5 rounded-full border border-slate-900/15 bg-white/70 px-4 py-2 text-sm font-bold text-slate-800 transition hover:bg-white"
             >
               Drive
             </Link>
             <Link
-              to="/auth"
+            to="/auth"
               className={`rounded-full px-4 py-2 text-sm font-bold ${scrolled ? "text-slate-700 hover:bg-slate-100" : "text-slate-700 hover:bg-white/60"}`}
             >
               Log in
@@ -283,7 +283,7 @@ export default function Index() {
                   Ride
                 </Link>
                 <Link
-                  to="/rider"
+                 to={`${user ? '/rider' : '/auth'}`}
                   className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 p-3 text-center font-bold text-slate-800"
                 >
                   Drive
