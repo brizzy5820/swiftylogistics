@@ -277,7 +277,7 @@ export default function Index() {
                   How it works
                 </a>
                 <Link
-                  to={`${user ? '/customer/ride' : '/customer/auth'}`}
+                  to={`${user ? '/customer/ride' : '/auth'}`}
                   className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 p-3 text-center font-bold text-white"
                 >
                   Ride
