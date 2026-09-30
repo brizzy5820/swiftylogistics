@@ -2,15 +2,15 @@ import { ArrowUpRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 const ACTIONS = [
-  { to: '/customer/ride', title: 'Book a ride', subtitle: 'A car is minutes away', image: '/sedan.png' },
-  { to: '/customer/book', title: 'Send a package', subtitle: 'Pickup and delivery', image: '/delivery-man.png' },
-  { to: '/customer/track', title: 'Track something', subtitle: 'Follow an active order', image: '/track-order.png' },
+  { to: '/customer/ride', title: 'Book a ride', subtitle: 'A car is minutes away', image: '/carinterface.jpg' },
+  { to: '/customer/book', title: 'Send a package', subtitle: 'Pickup and delivery',image: '/deliveryinterface.jpg' },
+  { to: '/customer/track', title: 'Track something', subtitle: 'Follow an active order', image: 'trackinterface.jpg' },
 ]
 
 const ACTIONSII = [
-  { to: '/customer/ride', title: 'Ride', image: '/sedan.png' },
-  { to: '/customer/book', title: 'Delivery', image: '/sedan.png' },
-  { to: '/customer/track', title: 'Track', image: '/sedan.png' },
+  { to: '/customer/ride', title: 'Ride', image: '/carinterface.jpg' },
+  { to: '/customer/book', title: 'Delivery', image: '/deliveryinterface.jpg' },
+  { to: '/customer/track', title: 'Track', image: 'trackinterface.jpg' },
   
 ]
 

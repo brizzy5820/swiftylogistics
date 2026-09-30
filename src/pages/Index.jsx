@@ -9,6 +9,7 @@ import {
   Navigation,
   PackageCheck,
   Search,
+  Activity,
   ShieldCheck,
   Smartphone,
   X,
@@ -468,25 +469,179 @@ export default function Index() {
           </div>
         </div>
       </section>
-      <section id="safety" className="bg-emerald-50 px-6 py-16 sm:px-8 sm:py-24 lg:px-10">
-        <div className="mx-auto grid max-w-7xl gap-6 lg:gap-8 lg:grid-cols-3">
-          <Safety
-            icon={ShieldCheck}
-            title="Built around trust"
-            text="Clear trip details, rider information and status updates keep everyone informed."
-          />
-          <Safety
-            icon={PackageCheck}
-            title="Every order visible"
-            text="Track rides and deliveries from the same account instead of jumping between apps."
-          />
-          <Safety
-            icon={CarFront}
-            title="Ready to scale"
-            text="The platform is structured for Express + MongoDB on the backend when live services are connected."
-          />
+  
+<section
+  id="safety"
+  className="overflow-hidden bg-emerald-50  py-16 sm:px-8 sm:py-24 lg:px-10"
+>
+  <div className="mx-auto ">
+    {/* Header */}
+    <div className="mb-10 px-6 lg:px-0 sm:mb-14">
+
+      <h2 className="text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl lg:text-5xl">
+        Everything moving,
+        <span className="text-emerald-600"> all in one view.</span>
+      </h2>
+
+      <p className="mt-4 max-w-xl text-base leading-7 text-gray-600 sm:text-lg">
+        Clear trip details, rider information and live status updates keep
+        every journey visible from pickup to destination.
+      </p>
+    </div>
+
+    {/* Main visual */}
+    <div className="relative overflow-hidden rounded-[2rem] border border-emerald-100 bg-white shadow-sm">
+      <div className="grid min-h-[520px] lg:grid-cols-[1.4fr_0.6fr]">
+
+        {/* MAP AREA */}
+        <div className="relative min-h-[420px] overflow-hidden bg-[#edf7f1] lg:min-h-[520px]">
+          {/* Map grid */}
+          <div className="absolute inset-0 opacity-40">
+            <div className="h-full w-full bg-[linear-gradient(90deg,transparent_0%,transparent_49%,rgba(16,185,129,0.12)_50%,transparent_51%),linear-gradient(0deg,transparent_0%,transparent_49%,rgba(16,185,129,0.12)_50%,transparent_51%)] bg-[size:70px_70px]" />
+          </div>
+
+          {/* Decorative roads */}
+          <div className="absolute -left-20 top-28 h-16 w-[120%] rotate-[-8deg] border-y border-dashed border-emerald-200/80 bg-white/40" />
+          <div className="absolute -left-10 top-[55%] h-20 w-[120%] rotate-[12deg] border-y border-dashed border-emerald-200/70 bg-white/30" />
+          <div className="absolute left-[48%] -top-20 h-[130%] w-14 rotate-[18deg] border-x border-dashed border-emerald-200/70 bg-white/30" />
+
+          {/* Route */}
+          <svg
+            className="absolute inset-0 h-full w-full"
+            viewBox="0 0 900 520"
+            fill="none"
+            preserveAspectRatio="none"
+          >
+            <path
+              d="M100 390 C210 340 230 190 370 235 C500 280 470 400 610 340 C710 295 690 150 810 110"
+              stroke="white"
+              strokeWidth="18"
+              strokeLinecap="round"
+            />
+
+            <path
+              d="M100 390 C210 340 230 190 370 235 C500 280 470 400 610 340 C710 295 690 150 810 110"
+              stroke="#10b981"
+              strokeWidth="5"
+              strokeLinecap="round"
+              strokeDasharray="10 12"
+            />
+          </svg>
+
+          {/* Pickup */}
+          <div className="absolute bottom-[22%] left-[9%]">
+            <div className="relative flex h-11 w-11 items-center justify-center rounded-full bg-gray-950 text-white shadow-lg">
+              <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400 opacity-20" />
+              <span className="relative h-2.5 w-2.5 rounded-full bg-emerald-400" />
+            </div>
+
+            <div className="mt-2 rounded-xl bg-white px-3 py-2 text-xs font-medium shadow-md">
+              Pickup
+              <span className="ml-2 text-emerald-600">Confirmed</span>
+            </div>
+          </div>
+
+          {/* Vehicle */}
+          <div className="absolute left-[52%] top-[43%]">
+            <div className="flex h-auto w-14 rotate-[-1deg] items-center justify-center rounded-2xl  text-white shadow-xl ">
+           <img src="/carinterface.png" alt="" className="object-fit:cover w-full h-full" />
+            </div>
+
+            <div className="mt-2 whitespace-nowrap rounded-xl bg-white px-3 py-2 text-xs font-medium shadow-md">
+               Rider
+              <span className="ml-2 text-gray-400">2 min away</span>
+            </div>
+          </div>
+
+          {/* Destination */}
+          <div className="absolute right-[8%] top-[15%]">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-950 text-white shadow-lg">
+              <MapPin className="h-5 w-5" />
+            </div>
+
+            <div className="mt-2 rounded-xl bg-white px-3 py-2 text-xs font-medium shadow-md">
+              Destination
+            </div>
+          </div>
+
+          {/* Floating status
+          <div className="absolute left-6 top-6 flex items-center gap-3 rounded-2xl border border-white/70 bg-white/90 px-4 py-3 shadow-lg backdrop-blur">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100">
+              <Activity className="h-4 w-4 text-emerald-600" />
+            </div>
+
+            <div>
+              <p className="text-xs font-medium text-gray-500">
+                Live network
+              </p>
+              <p className="text-sm font-semibold text-gray-900">
+                1,248 journeys active
+              </p>
+            </div>
+          </div> */}
+
+          {/* Bottom map label */}
+          <div className="absolute bottom-6 left-6 rounded-full border border-white/70 bg-white/80 px-4 py-2 text-xs font-medium text-gray-600 shadow-sm backdrop-blur">
+            Real-time movement visibility
+          </div>
         </div>
-      </section>
+
+        {/* INFORMATION PANEL */}
+        <div className="flex flex-col justify-center bg-white p-8 sm:p-10 lg:p-12">
+          <div className="mb-8">
+            <div className="mb-3 h-1 w-10 rounded-full bg-emerald-500" />
+
+            <h3 className="text-2xl font-bold tracking-tight text-gray-950 sm:text-3xl">
+              Built around
+              <br />
+              <span className="text-emerald-600">trust & visibility.</span>
+            </h3>
+          </div>
+
+          <div className="space-y-7">
+            {/* Item */}
+            <div className="border-b border-gray-100 pb-6">
+              <p className="mb-1 text-sm font-semibold text-gray-950">
+                01 — Built around trust
+              </p>
+
+              <p className="text-sm leading-6 text-gray-500">
+                Clear trip details, rider information and status updates keep
+                everyone informed throughout the journey.
+              </p>
+            </div>
+
+            {/* Item */}
+            <div className="border-b border-gray-100 pb-6">
+              <p className="mb-1 text-sm font-semibold text-gray-950">
+                02 — Every order visible
+              </p>
+
+              <p className="text-sm leading-6 text-gray-500">
+                Track rides and deliveries from the same account instead of
+                jumping between different apps.
+              </p>
+            </div>
+
+            {/* Item */}
+            <div>
+              <p className="mb-1 text-sm font-semibold text-gray-950">
+                03 — Ready to scale
+              </p>
+
+              <p className="text-sm leading-6 text-gray-500">
+                A transport platform structured to grow as live services,
+                logistics and backend infrastructure come online.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
       <section className="bg-slate-950 px-6 py-16 text-center text-white sm:px-8 sm:py-24">
         <div className="mx-auto max-w-3xl">
           <h2 className="font-display text-3xl font-black tracking-tight sm:text-4xl lg:text-6xl">
