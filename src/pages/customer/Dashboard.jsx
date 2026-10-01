@@ -9,9 +9,9 @@ import { useStore, useCurrentUser } from '../../lib/api-store'
 import { Skeleton, SkeletonCard } from '../../components/ui/skeleton'
 
 const PLAN_CARDS = [
-  { title: 'Book a ride', subtitle: 'A car is minutes away, day or night', image: '/formimg.png' },
+  { title: 'Book a ride', subtitle: 'A car is minutes away, day or night', image: '/formimg.jpg' },
   { title: 'Send a delivery', subtitle: 'Package pickup and drop-off in minutes', image: '/deliveryguy.jpg' },
-  { title: 'Track an order', subtitle: 'Follow it live, every step of the way', image: '/ride.png' },
+  { title: 'Track an order', subtitle: 'Follow it live, every step of the way', image: '/Palz - Delivery.png' },
 ]
 
 export default function CustomerDashboard() {

@@ -27,6 +27,7 @@ import AdminDeliveries from './pages/admin/Deliveries'
 import AdminSupport from './pages/admin/Support'
 import AdminAccountPage from './pages/admin/Account'
 import { Toaster } from './components/ui/sonner'
+import { GlobalChatNotifier } from './components/global-chat-notifier'
 
 const queryClient = new QueryClient()
 
@@ -74,6 +75,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <ScrollToTop />
+        <GlobalChatNotifier />
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/onboarding" element={<Onboarding />} />
@@ -104,7 +106,7 @@ export default function App() {
           <Route path="/admin/account" element={<AdminAccountPage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
-        <Toaster richColors position="top-center" />
+        <Toaster richColors position="top-center" closeButton />
       </BrowserRouter>
     </QueryClientProvider>
   )

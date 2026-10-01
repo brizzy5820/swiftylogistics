@@ -5,7 +5,7 @@ import { AppShell } from '@/components/app-shell'
 import { DeliveryMap } from '@/components/delivery-map'
 import { MobileDrawer } from '@/components/mobile-drawer'
 import { TripCard } from '@/components/trip-card'
-import { ChatPanel, ChatLauncher } from '@/components/chat-panel'
+import { ChatPanel, ChatLauncher, useChatThread, ChatMessageList, ChatComposer } from '@/components/chat-panel'
 // Trip tracking is publicly viewable by code; only the "my trips" list requires sign-in.
 import { useStore, useCurrentUser, updateDeliveryStatus, confirmOrder, STATUS_LABEL } from '@/lib/api-store'
 import { getErrorMessage, getPublicTracking } from '@/services/api'
@@ -52,6 +52,16 @@ export default function Track() {
   const deliveryId = effectiveDelivery?.id
   const deliveryView = effectiveDelivery
   const { position: simulatedCourier } = useSimulatedCourierPosition(deliveryView)
+
+  // Mobile only: when the drawer is in chat mode, this drives the message
+  // list (in the drawer body) and composer (pinned in the drawer footer).
+  // Computed with optional chaining (rather than reusing `canContact`,
+  // defined later) because hooks must run on every render, including the
+  // ones before deliveryView/canContact are known.
+  const mobileChatActive = Boolean(
+    chatOpen && deliveryView?.riderName && !['delivered', 'cancelled'].includes(deliveryView?.status),
+  )
+  const mobileChat = useChatThread(deliveryView?.id, user?.id, mobileChatActive)
 
   // Landing on the live track page with a rider already assigned counts as
   // the customer's confirmation — this is what unlocks "Start trip" on the
@@ -557,14 +567,43 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
     </div>
   </div>
 
-  {/* NOTE: banner is rendered inside the shared mobile drawer. */}
+  {/* NOTE: banner is rendered inside the shared mobile drawer. On mobile,
+      opening chat transforms this same drawer into the message box — list
+      in the scrollable body, composer pinned in the footer — rather than
+      stacking a second floating panel on top of it. `key` forces a clean
+      remount (and re-snap to a taller default) when switching modes. */}
   <MobileDrawer
-    banner={banner}
-    initialSnapIndex={1}
+    key={chatOpen ? 'chat' : 'details'}
+    banner={chatOpen ? null : banner}
+    initialSnapIndex={chatOpen ? 2 : 1}
     snapPoints={[14, 52, 88]}
     onHeightChange={handleSheetHeightChange}
+    footer={chatOpen ? (
+      <ChatComposer
+        text={mobileChat.text}
+        setText={mobileChat.setText}
+        sending={mobileChat.sending}
+        onSend={mobileChat.handleSend}
+        error={mobileChat.error}
+      />
+    ) : undefined}
   >
-    <DetailPanel />
+    {chatOpen ? (
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="mb-3 flex shrink-0 items-center justify-between border-b border-slate-100 pb-3">
+          <button
+            type="button"
+            onClick={() => { setChatOpen(false); setChatUnread(false) }}
+            className="flex items-center gap-2 text-sm font-bold text-slate-900"
+          >
+            <ArrowLeft className="h-4 w-4" /> {deliveryView.riderName || 'Your rider'}
+          </button>
+        </div>
+        <ChatMessageList messages={mobileChat.messages} loaded={mobileChat.loaded} currentUserId={user?.id} className="min-h-0 flex-1 overflow-y-auto" />
+      </div>
+    ) : (
+      <DetailPanel />
+    )}
   </MobileDrawer>
 </div>
       {/* ── Desktop: side-by-side grid (no drag — real layout space, not a floating sheet) ── */}

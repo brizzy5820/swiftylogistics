@@ -1,6 +1,6 @@
 // pages/customer/ride.jsx (or wherever Ride.jsx lives)
 import { useCallback, useState, useEffect, useRef, useMemo } from 'react'
-import { ArrowLeft, CarFront, Check, Navigation, Users,User, Clock3, X, ArrowRight, Radio, MapPin, LoaderCircle, AlertCircle, RefreshCw, Plus, Minus, Wallet, CreditCard, ChevronLeftIcon } from 'lucide-react'
+import { ArrowLeft, CarFront, Check, Navigation, Users,User, Clock3, X, ArrowRight, Radio, MapPin, LoaderCircle, RefreshCw, Plus, Minus, Wallet, CreditCard, ChevronLeftIcon } from 'lucide-react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { AppShell } from '../../components/app-shell'
 import { DeliveryMap } from '../../components/delivery-map'
@@ -183,6 +183,7 @@ export default function Ride() {
   const [pickupCoords, setPickupCoords] = useState(intent.pickupCoords || null)
   const [dropoffCoords, setDropoffCoords] = useState(intent.dropoffCoords || null)
   const [ridePick, setRidePick] = useState(false)
+  const [paymentStep, setPaymentStep] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [isSearching, setIsSearching] = useState(false)
@@ -402,6 +403,7 @@ async function confirmRide() {
 
     setShowModal(false)
     setRidePick(false)
+    setPaymentStep(false)
 
     setSearchingRideId(
       ride._id || ride.id
@@ -524,18 +526,18 @@ function confirmMatchedRide() {
 
   return (
     <AppShell hideMobileHeader>
-      <main className="mx-auto flex flex-col gap-6 px-4 py-6 lg:mt-4 md:mt-4 sm:px-6 lg:grid lg:grid-cols-2 ">
+      <main className="mx-auto flex flex-col gap-6 px-4 py-4 lg:mt-4 md:mt-4 sm:px-6 lg:grid lg:grid-cols-2 ">
         {/* Left: route form */}
         <section className="overflow-visible rounded-3xl md:px-3 sm:p-8">
            <div className="max-w-lg gap-3  flex items-center">
             {/* <p className="text-sm font-bold uppercase tracking-wider text-emerald-700">Ride with Swifty</p> */}
             <Link to="/customer" className='lg:hidden mt-2' ><ChevronLeftIcon className='w-6 h-6'/></Link>
-            <h1 className="mt-2 font-display text-3xl font-black tracking-tight text-slate-950 sm:text-5xl">Let's Ride</h1>
+            <h1 className="mt-2 font-display text-2xl font-black tracking-tight text-slate-950 sm:text-5xl">Where to?</h1>
            
           </div>
 
 
-          <div className="relative z-20 mt-8 overflow-visible rounded-2xl bg-white p-4 shadow-sm" style={{ overflow: 'visible' }}>
+          <div className="relative z-20 mt-2 overflow-visible rounded-2xl bg-white p-4 lg:shadow-sm" style={{ overflow: 'visible' }}>
             <div className="relative space-y-6" style={{ overflow: 'visible' }}>
               {/* Dashed connector: bottom of pickup marker to top of dropoff marker */}
               <div className="pointer-events-none absolute left-[27px] top-[52px] h-6 w-px border-l-2 border-dashed border-slate-300" />
@@ -598,7 +600,7 @@ function confirmMatchedRide() {
       {/* Mobile confirmation: a single persistent map, pushed up by whichever
           sheet is currently open, so pickup/dropoff markers stay visible
           and never end up hidden behind the sheet. */}
-      {(showModal || searchingRideId || matchedRider) && (
+      {(showModal || paymentStep || searchingRideId || matchedRider) && (
         <>
           <div
             className={`fixed inset-x-0 top-0 z-100 lg:hidden ${sheetDragging ? '' : 'transition-[bottom] duration-200 ease-out'}`}
@@ -622,11 +624,11 @@ function confirmMatchedRide() {
               onHeightChange={handleSheetHeightChange}
               footer={(
                 <button
-                  onClick={() => { setRidePick(false); confirmRide() }}
-                  disabled={loading || !option || !paymentMethod}
+                  onClick={() => { setRidePick(false); setShowModal(false); setErrorMessage(''); setPaymentStep(true) }}
+                  disabled={loading || !option}
                   className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-400 disabled:opacity-60"
                 >
-                  {loading ? 'Starting search…' : 'Find a rider'} <ArrowRight className="h-4 w-4" />
+                  Continue <ArrowRight className="h-4 w-4" />
                 </button>
               )}
             >
@@ -644,8 +646,71 @@ function confirmMatchedRide() {
                   {errorMessage}
                 </p>
               )}
-              {/* Payment Method Selection */}
-              <div className="mb-4">
+              {rideOptions}
+            </MobileDrawer>
+          )}
+
+          {/* Desktop confirmation remains a centered modal. */}
+          {ridePick && (
+            <div className="fixed inset-0 z-50 hidden items-end justify-center bg-slate-900/50 p-4 sm:items-center lg:flex">
+              <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="font-display text-xl font-black text-slate-950">Choose your ride</h2>
+                  <button onClick={() => setRidePick(false)} className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200" aria-label="Close">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <p className="mb-4 text-sm text-slate-500">{pickup || 'My location'} → {dropoff}</p>
+                {errorMessage && (
+                  <p className="mb-4 whitespace-pre-line rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">
+                    {errorMessage}
+                  </p>
+                )}
+                {rideOptions}
+                <button
+                  onClick={() => { setRidePick(false); setShowModal(false); setErrorMessage(''); setPaymentStep(true) }}
+                  disabled={loading || !option}
+                  className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-400 disabled:opacity-60"
+                >
+                  Continue <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 2: payment method — its own screen, shown after a ride
+              type has been picked and before the rider search begins. ── */}
+          {paymentStep && (
+            <MobileDrawer
+              onHeightChange={handleSheetHeightChange}
+              footer={(
+                <button
+                  onClick={() => confirmRide()}
+                  disabled={loading || !paymentMethod}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-400 disabled:opacity-60"
+                >
+                  {loading ? 'Starting search…' : 'Find a rider'} <ArrowRight className="h-4 w-4" />
+                </button>
+              )}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <button
+                  onClick={() => { setPaymentStep(false); setShowModal(true); setRidePick(true) }}
+                  className="flex items-center gap-1.5 text-sm font-bold text-slate-600 hover:text-slate-900"
+                >
+                  <ArrowLeft className="h-4 w-4" /> Back
+                </button>
+                <button onClick={() => setPaymentStep(false)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200" aria-label="Close">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <h2 className="font-display text-xl font-black text-slate-950">{option?.name || 'Your ride'} · ₦{option ? dynamicPrices[option.id] : 0}</h2>
+              {errorMessage && (
+                <p className="mt-4 whitespace-pre-line rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">
+                  {errorMessage}
+                </p>
+              )}
+              <div className="mt-5">
                 <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Payment Method</p>
                 <div className="flex gap-3">
                   <button
@@ -673,34 +738,33 @@ function confirmMatchedRide() {
                     <span className="text-sm font-semibold text-slate-700">Transfer</span>
                   </button>
                 </div>
-                {!paymentMethod && (
-                  <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3" /> Select payment option
-                  </p>
-                )}
               </div>
-              {rideOptions}
             </MobileDrawer>
           )}
 
-          {/* Desktop confirmation remains a centered modal. */}
-          {ridePick && (
+          {/* Desktop payment-method modal. */}
+          {paymentStep && (
             <div className="fixed inset-0 z-50 hidden items-end justify-center bg-slate-900/50 p-4 sm:items-center lg:flex">
               <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl">
                 <div className="mb-4 flex items-center justify-between">
-                  <h2 className="font-display text-xl font-black text-slate-950">Choose your ride</h2>
-                  <button onClick={() => setRidePick(false)} className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200" aria-label="Close">
+                  <button
+                    onClick={() => { setPaymentStep(false); setShowModal(true); setRidePick(true) }}
+                    className="flex items-center gap-1.5 text-sm font-bold text-slate-600 hover:text-slate-900"
+                  >
+                    <ArrowLeft className="h-4 w-4" /> Back
+                  </button>
+                  <button onClick={() => setPaymentStep(false)} className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200" aria-label="Close">
                     <X className="h-4 w-4" />
                   </button>
                 </div>
-                <p className="mb-4 text-sm text-slate-500">{pickup || 'My location'} → {dropoff}</p>
+                <h2 className="font-display text-xl font-black text-slate-950">How will you pay?</h2>
+                <p className="mt-1 text-sm text-slate-500">{option?.name || 'Your ride'} · ₦{option ? dynamicPrices[option.id] : 0}</p>
                 {errorMessage && (
-                  <p className="mb-4 whitespace-pre-line rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">
+                  <p className="mt-4 whitespace-pre-line rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">
                     {errorMessage}
                   </p>
                 )}
-                {/* Payment Method Selection */}
-                <div className="mb-4">
+                <div className="mt-5">
                   <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Payment Method</p>
                   <div className="flex gap-3">
                     <button
@@ -728,16 +792,10 @@ function confirmMatchedRide() {
                       <span className="text-sm font-semibold text-slate-700">Transfer</span>
                     </button>
                   </div>
-                  {!paymentMethod && (
-                    <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3" /> Select payment option
-                    </p>
-                  )}
                 </div>
-                {rideOptions}
                 <button
-                  onClick={() => { setRidePick(false); confirmRide() }}
-                  disabled={loading || !option || !paymentMethod}
+                  onClick={() => confirmRide()}
+                  disabled={loading || !paymentMethod}
                   className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-400 disabled:opacity-60"
                 >
                   {loading ? 'Starting search…' : 'Find a rider'} <ArrowRight className="h-4 w-4" />

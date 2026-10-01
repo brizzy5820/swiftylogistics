@@ -12,9 +12,11 @@ import {
   Activity,
   ShieldCheck,
   Smartphone,
+  User,
   X,
 } from "lucide-react";
 import { useCurrentUser } from "../lib/api-store";
+import { ShimmerImage } from "../components/shimmer-image";
 import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "../components/ui/sheet";
@@ -181,6 +183,26 @@ function LocationField({ variant, value, onChange, onCoords, placeholder }) {
   );
 }
 
+function ProfileBar({ user, className = "" }) {
+  const dashboardPath = user.role === "rider" ? "/rider" : "/customer";
+  return (
+    <Link
+      to={dashboardPath}
+      className={`flex items-center gap-2 rounded-full border border-slate-900/10 bg-white/80 py-1 pl-1 pr-3 text-sm font-bold text-slate-800 shadow-sm transition hover:bg-white ${className}`}
+    >
+      <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-emerald-600 text-white">
+        <ShimmerImage
+          src={user.avatarUrl}
+          className="h-full w-full"
+          imgClassName="h-full w-full object-cover"
+          fallback={<User className="h-3.5 w-3.5" />}
+        />
+      </span>
+      {user.name?.split(" ")[0] || "Account"}
+    </Link>
+  );
+}
+
 export default function Index() {
   const navigate = useNavigate();
   const { user } = useCurrentUser();
@@ -238,24 +260,38 @@ export default function Index() {
             <a href="#safety">Safety</a>
           </nav>
           <div className="hidden items-center gap-2 sm:flex">
-            <Link
-              to={`${!user ? '/auth' : '/customer/ride'}`}
-              className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 transition hover:bg-emerald-400"
-            >
-              <CarFront className="h-4 w-4" /> Ride
-            </Link>
-            <Link
-             to={`${user ? '/rider' : '/auth'}`}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-900/15 bg-white/70 px-4 py-2 text-sm font-bold text-slate-800 transition hover:bg-white"
-            >
-              Drive
-            </Link>
-            <Link
-            to="/auth"
-              className={`rounded-full px-4 py-2 text-sm font-bold ${scrolled ? "text-slate-700 hover:bg-slate-100" : "text-slate-700 hover:bg-white/60"}`}
-            >
-              Log in
-            </Link>
+            {user ? (
+              <>
+                <Link
+                  to={user.role === "rider" ? "/rider" : "/customer/ride"}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 transition hover:bg-emerald-400"
+                >
+                  <CarFront className="h-4 w-4" /> {user.role === "rider" ? "Drive along" : "Ride along"}
+                </Link>
+                <ProfileBar user={user} />
+              </>
+            ) : (
+              <>
+                <Link
+                  to="/auth"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-emerald-900/15 transition hover:bg-emerald-400"
+                >
+                  <CarFront className="h-4 w-4" /> Ride
+                </Link>
+                <Link
+                  to="/auth"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-900/15 bg-white/70 px-4 py-2 text-sm font-bold text-slate-800 transition hover:bg-white"
+                >
+                  Drive
+                </Link>
+                <Link
+                  to="/auth"
+                  className={`rounded-full px-4 py-2 text-sm font-bold ${scrolled ? "text-slate-700 hover:bg-slate-100" : "text-slate-700 hover:bg-white/60"}`}
+                >
+                  Log in
+                </Link>
+              </>
+            )}
           </div>
           <Sheet>
             <SheetTrigger asChild>
@@ -277,24 +313,38 @@ export default function Index() {
                 <a href="#how" className="rounded-xl p-3 font-semibold">
                   How it works
                 </a>
-                <Link
-                  to={`${user ? '/customer/ride' : '/auth'}`}
-                  className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 p-3 text-center font-bold text-white"
-                >
-                  Ride
-                </Link>
-                <Link
-                 to={`${user ? '/rider' : '/auth'}`}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 p-3 text-center font-bold text-slate-800"
-                >
-                  Drive
-                </Link>
-                <Link
-                  to="/auth"
-                  className="rounded-xl bg-slate-100 p-3 text-center font-bold text-slate-800"
-                >
-                  Log in
-                </Link>
+                {user ? (
+                  <>
+                    <Link
+                      to={user.role === "rider" ? "/rider" : "/customer/ride"}
+                      className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 p-3 text-center font-bold text-white"
+                    >
+                      {user.role === "rider" ? "Drive along" : "Ride along"}
+                    </Link>
+                    <ProfileBar user={user} className="justify-center p-3" />
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      to="/auth"
+                      className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 p-3 text-center font-bold text-white"
+                    >
+                      Ride
+                    </Link>
+                    <Link
+                      to="/auth"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 p-3 text-center font-bold text-slate-800"
+                    >
+                      Drive
+                    </Link>
+                    <Link
+                      to="/auth"
+                      className="rounded-xl bg-slate-100 p-3 text-center font-bold text-slate-800"
+                    >
+                      Log in
+                    </Link>
+                  </>
+                )}
               </div>
             </SheetContent>
           </Sheet>
@@ -651,10 +701,10 @@ export default function Index() {
             One account for rides, packages and the everyday journeys in between.
           </p>
           <Link
-            to="/auth"
+            to={user ? (user.role === "rider" ? "/rider" : "/customer/ride") : "/auth"}
             className="mt-8 inline-flex items-center gap-2 rounded-full bg-emerald-500 px-6 py-3.5 text-sm font-bold hover:bg-emerald-400"
           >
-            Get started <ArrowRight className="h-4 w-4" />
+            {user ? (user.role === "rider" ? "Go to your dashboard" : "Book a ride") : "Get started"} <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
       </section>

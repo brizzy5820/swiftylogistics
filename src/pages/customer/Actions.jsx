@@ -5,10 +5,10 @@ import { useRequireAuth } from '../../lib/use-require-auth'
 import { AppShell } from '../../components/app-shell'
 
 const ACTIONS = [
-  { to: '/customer/ride', title: 'Book a ride', subtitle: 'A car is minutes away', image: '/sedan.png', Icon: CarFront },
-  { to: '/customer/book', title: 'Send a package', subtitle: 'Pickup & delivery', image: '/delivery-man.png', Icon: PackageCheck },
-  { to: '/customer/schedule', title: 'Schedule delivery', subtitle: 'Plan it for later', image: '/track.png',Icon: Calendar },
-  { to: '/customer/track', title: 'Track an order', subtitle: 'Follow it live', image: '/track-order.png', Icon: MapPin },
+  { to: '/customer/ride', title: 'Book a ride', subtitle: 'A car is minutes away', image: '/carinterface.png', Icon: CarFront },
+  { to: '/customer/book', title: 'Send a package', subtitle: 'Pickup & delivery', image: '/deliveryinterface.png', Icon: PackageCheck },
+  { to: '/customer/schedule', title: 'Schedule delivery', subtitle: 'Plan it for later', image: '',Icon: Calendar },
+  { to: '/customer/track', title: 'Track an order', subtitle: 'Follow it live', image: '/trackinterface.png', Icon: MapPin },
 ]
 
 export default function Actions() {
@@ -41,9 +41,9 @@ export default function Actions() {
                   `}
                 >
                   <span
-                    className={`flex h-26 w-26 items-center justify-center overflow-hidden rounded-xl p-3  border border-slate-200 bg-white text-slate-900 hover:shadow-lg ${a.primary ? "text-white/15" : "text-emerald-50"}`}
+                    className={`flex h-26 w-26 items-center justify-center overflow-hidden rounded-2xl p-3 bg-gray-100 text-slate-900 hover:shadow-lg ${a.primary ? "text-white/15" : "text-emerald-50"}`}
                   >
-                    <img src={a.image} alt="" className="h-full w-full object-cover " />
+                    <img src={a.image} alt="" className="h-full w-full object-contain " />
                   </span>
                   <span className="min-w-0">
                     <span className="block text-sm font-bold">{a.title}</span>

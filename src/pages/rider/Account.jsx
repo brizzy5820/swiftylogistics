@@ -126,11 +126,12 @@ export default function RiderAccount() {
               <div className="flex items-center gap-3">
                 <div className="relative h-12 w-12 shrink-0">
                   <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-emerald-600 text-white">
-                    {accountUser.avatarUrl ? (
-                      <ShimmerImage src={accountUser.avatarUrl} className="h-full w-full" imgClassName="h-full w-full object-cover" />
-                    ) : (
-                      <User className="h-6 w-6" />
-                    )}
+                    <ShimmerImage
+                        src={accountUser.avatarUrl}
+                        className="h-full w-full"
+                        imgClassName="h-full w-full object-cover"
+                        fallback={<User className="h-6 w-6" />}
+                      />
                   </div>
                   <button
                     type="button"
@@ -302,11 +303,12 @@ function ProfilePanel({ user, onAvatarChange, onAvatarRemove, avatarError }) {
       <div className="flex items-center gap-4 rounded-2xl border border-slate-200 p-5">
         <div className="relative shrink-0">
           <div className="flex h-28 w-24 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
-            {user.avatarUrl ? (
-              <ShimmerImage src={user.avatarUrl} className="h-full w-full" imgClassName="h-full w-full object-cover" />
-            ) : (
-              <User className="h-10 w-10 text-slate-300" />
-            )}
+            <ShimmerImage
+                src={user.avatarUrl}
+                className="h-full w-full"
+                imgClassName="h-full w-full object-cover"
+                fallback={<User className="h-10 w-10 text-slate-300" />}
+              />
           </div>
           <button
             type="button"

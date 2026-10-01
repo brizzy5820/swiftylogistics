@@ -717,10 +717,10 @@ export default function Book() {
             <div className="min-w-0 lg:mt-5 md:mt-5  space-y-4">
     
                  {/* Back button */}
-           <div className="max-w-lg gap-3 px-3 mt-5 flex items-center">
+           <div className="max-w-lg gap-3  mt-5 flex items-center">
             {/* <p className="text-sm font-bold uppercase tracking-wider text-emerald-700">Ride with Swifty</p> */}
             <Link to="/customer" className='lg:hidden ' ><ChevronLeftIcon className='w-6 h-6'/></Link>
-            <h1 className=" font-display text-3xl font-black tracking-tight text-slate-950 sm:text-5xl">Place Delivery</h1>
+            <h1 className=" font-display text-2xl font-black tracking-tight text-slate-950 sm:text-5xl">Place Delivery</h1>
            
           </div>
 
@@ -741,7 +741,7 @@ export default function Book() {
                   {/* ─── STEP 0: Route ─── */}
                   {step === 0 && (
                     <div className="space-y-3">
-                      <div className="relative space-y-6 rounded-2xl bg-white p-4 shadow-sm">
+                      <div className="relative space-y-6 rounded-2xl bg-white p-4 lg:shadow-sm">
                         <div className="pointer-events-none absolute left-[27px] top-[52px] h-6 w-px border-l-2 border-dashed border-slate-300" />
                       <AddressField
                         type="pickup"

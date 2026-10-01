@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell'
 import { DeliveryMap } from '@/components/delivery-map'
 import { TripCard } from '@/components/trip-card'
-import { ChatPanel, ChatLauncher } from '@/components/chat-panel'
+import { ChatPanel, ChatLauncher, useChatThread, ChatMessageList, ChatComposer } from '@/components/chat-panel'
 import { MobileDrawer } from '@/components/mobile-drawer'
 import { useRequireAuth } from '@/lib/use-require-auth'
 import { useStore, useCurrentUser, updateDeliveryStatus, STATUS_LABEL, upsertDelivery, mapOrder } from '@/lib/api-store'
@@ -73,6 +73,11 @@ function RiderJobView() {
   const delivery = deliveries.find((d) => String(d.id) === String(id))
   const [loadingJob, setLoadingJob] = useState(false)
   const [jobNotFound, setJobNotFound] = useState(false)
+
+  // Mobile only: when the drawer is in chat mode, this drives the message
+  // list (in the drawer body) and composer (pinned in the drawer footer).
+  const mobileChatActive = Boolean(chatOpen && delivery && ['accepted', 'picked_up', 'in_transit'].includes(delivery.status))
+  const mobileChat = useChatThread(delivery?.id, currentUser?.id, mobileChatActive)
 
   // Fallback fetch if opened directly or not yet present in store
   useEffect(() => {
@@ -434,8 +439,36 @@ function RiderJobView() {
             </button>
           </div>
 
-          <MobileDrawer onHeightChange={handleSheetHeightChange}>
-            <div className="space-y-6">{detailCards}</div>
+          <MobileDrawer
+            key={chatOpen ? 'chat' : 'details'}
+            initialSnapIndex={chatOpen ? 2 : 1}
+            onHeightChange={handleSheetHeightChange}
+            footer={chatOpen ? (
+              <ChatComposer
+                text={mobileChat.text}
+                setText={mobileChat.setText}
+                sending={mobileChat.sending}
+                onSend={mobileChat.handleSend}
+                error={mobileChat.error}
+              />
+            ) : undefined}
+          >
+            {chatOpen ? (
+              <div className="flex h-full min-h-0 flex-col">
+                <div className="mb-3 flex shrink-0 items-center justify-between border-b border-slate-100 pb-3">
+                  <button
+                    type="button"
+                    onClick={() => { setChatOpen(false); setChatUnread(false) }}
+                    className="flex items-center gap-2 text-sm font-bold text-slate-900"
+                  >
+                    <ArrowLeft className="h-4 w-4" /> {delivery.customerName || 'Customer'}
+                  </button>
+                </div>
+                <ChatMessageList messages={mobileChat.messages} loaded={mobileChat.loaded} currentUserId={currentUser?.id} className="min-h-0 flex-1 overflow-y-auto" />
+              </div>
+            ) : (
+              <div className="space-y-6">{detailCards}</div>
+            )}
           </MobileDrawer>
         </div>
 

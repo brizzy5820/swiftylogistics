@@ -136,9 +136,17 @@ function makeDomOverlay(G) {
 }
 
 // Smoothly glide an overlay from `from` -> `to` (plain {lat,lng} objects).
-function animateOverlay(G, overlay, from, to, duration = 1400) {
+// Generation-guarded: if this overlay gets a NEW animateOverlay call before
+// this one finishes (which happens naturally — a fresh courier position can
+// arrive mid-glide), the older tick loop notices it's been superseded and
+// stops touching the marker instead of racing the newer one for every
+// frame. That race was what made the car's motion look glitchy/jerky.
+function animateOverlay(G, overlay, from, to, duration = 900) {
+  const generation = (overlay._animGen || 0) + 1
+  overlay._animGen = generation
   const t0 = performance.now()
   function tick(now) {
+    if (overlay._animGen !== generation) return // a newer glide took over
     const p = Math.min((now - t0) / duration, 1)
     const lat = from.lat + (to.lat - from.lat) * p
     const lng = from.lng + (to.lng - from.lng) * p
@@ -531,7 +539,7 @@ export function DeliveryMap({
       const fromPlain = { lat: from.lat(), lng: from.lng() }
       const toPlain = { lat: to.lat(), lng: to.lng() }
       carRef.current.setRotation(bearingDegrees(fromPlain, toPlain))
-      animateOverlay(G, carRef.current, fromPlain, toPlain, 1400)
+      animateOverlay(G, carRef.current, fromPlain, toPlain)
     }
 
     const view = map.getBounds()
