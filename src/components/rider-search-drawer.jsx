@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { AlertCircle, ArrowRight, RefreshCw, User, X } from 'lucide-react'
 
 // Shared with the delivery booking flow (Book.jsx) — the exact same
@@ -103,7 +103,10 @@ export function RiderSearchDrawer({ rider, onCancel, onConfirm, onHeightChange, 
   // Report the card's real, content-driven height (px) so the map behind it
   // can stay clear of it — recalculates automatically when content changes,
   // e.g. switching from "searching" to "rider found".
-  useEffect(() => {
+  // Layout effect, not a passive one: the map is positioned from this number,
+  // so measuring after paint would show it at full height for a frame and
+  // then yank it up under the card.
+  useLayoutEffect(() => {
     if (!onHeightChange || !cardRef.current) return
     const el = cardRef.current
     const report = () => onHeightChange(el.getBoundingClientRect().height, false)
@@ -124,7 +127,7 @@ export function RiderSearchDrawer({ rider, onCancel, onConfirm, onHeightChange, 
         <button type="button" onClick={onCancel} className="absolute inset-0 h-full w-full bg-slate-950/25" aria-label="Close" />
         <div
           ref={cardRef}
-          className="relative mx-auto max-h-[75vh] w-full overflow-y-auto overscroll-contain touch-pan-y rounded-t-3xl bg-white p-5 shadow-2xl"
+          className="relative mx-auto max-h-[75vh] w-full origin-bottom animate-in slide-in-from-bottom-4 fade-in overflow-y-auto overscroll-contain touch-pan-y rounded-t-3xl bg-white p-5 shadow-2xl duration-300 ease-out"
           style={{ paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))', WebkitOverflowScrolling: 'touch' }}
         >
           <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-200" />

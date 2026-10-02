@@ -214,6 +214,10 @@ export function DeliveryMap({
   // Always-fresh snapshots read from the resize observer below.
   const pickupRef = useRef(pickup)
   const dropoffRef = useRef(dropoff)
+  // courierInfo is an object literal at most call sites, so depending on it
+  // directly would re-run the car effect on every single render — restarting
+  // the 900ms glide and re-panning mid-flight, which reads as a glitch.
+  const courierInfoRef = useRef(courierInfo)
 
   const [error, setError] = useState(null)
   const [mapReady, setMapReady] = useState(false)
@@ -221,6 +225,7 @@ export function DeliveryMap({
   useEffect(() => { onMapClickRef.current = onMapClick }, [onMapClick])
   useEffect(() => { pickupRef.current = pickup }, [pickup])
   useEffect(() => { dropoffRef.current = dropoff }, [dropoff])
+  useEffect(() => { courierInfoRef.current = courierInfo }, [courierInfo])
 
   // ── Boot: create the map once ───────────────────────────────────────────
   useEffect(() => {

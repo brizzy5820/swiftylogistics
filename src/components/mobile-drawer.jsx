@@ -3,7 +3,20 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 const DEFAULT_SNAP_POINTS = [30, 64, 88]
 
-export function MobileDrawer({ children, footer, banner, onClose, onHeightChange, initialSnapIndex = 1, snapPoints = DEFAULT_SNAP_POINTS }) {
+// fitContent: the sheet is sized by its own content (capped at the largest
+// snap point) instead of a fixed snap height, so short steps look exactly like
+// the rider-search card — and the map behind it never has to absorb a jump
+// between two unrelated fixed heights.
+export function MobileDrawer({
+  children,
+  footer,
+  banner,
+  onClose,
+  onHeightChange,
+  initialSnapIndex = 1,
+  snapPoints = DEFAULT_SNAP_POINTS,
+  fitContent = false,
+}) {
   const sheetRef = useRef(null)
   const dragRef = useRef({ dragging: false, startY: 0, startHeight: 0, lastY: 0, lastT: 0, velocity: 0 })
   const [snapIndex, setSnapIndex] = useState(initialSnapIndex)
@@ -101,13 +114,27 @@ export function MobileDrawer({ children, footer, banner, onClose, onHeightChange
       {banner && <div className="pointer-events-none absolute inset-x-0 bottom-[30vh] z-10 mx-4">{banner}</div>}
       <div
         ref={sheetRef}
-        style={{ height: `${heightVh}vh`, transition: dragging ? 'none' : 'height 0.28s cubic-bezier(0.32, 0.72, 0, 1)', borderRadius: '1.5rem 1.5rem 0 0' }}
-        className="absolute inset-x-0 bottom-0 flex flex-col bg-white shadow-2xl"
+        style={
+          fitContent
+            ? { maxHeight: `${snapPoints[snapPoints.length - 1]}vh`, borderRadius: '1.5rem 1.5rem 0 0' }
+            : {
+                height: `${heightVh}vh`,
+                transition: dragging ? 'none' : 'height 0.28s cubic-bezier(0.32, 0.72, 0, 1)',
+                borderRadius: '1.5rem 1.5rem 0 0',
+              }
+        }
+        className={`absolute inset-x-0 bottom-0 flex flex-col bg-white shadow-2xl${fitContent ? ' origin-bottom animate-in slide-in-from-bottom-4 duration-300 ease-out' : ''}`}
       >
         <div className="flex shrink-0 touch-none items-center justify-center px-4 pb-2 pt-3">
-          <div onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp} className="flex h-8 w-full cursor-grab items-center justify-center active:cursor-grabbing">
-            <div className="h-1 w-10 rounded-full bg-slate-300" />
-          </div>
+          {fitContent ? (
+            <div className="flex h-8 w-full items-center justify-center">
+              <div className="h-1 w-10 rounded-full bg-slate-300" />
+            </div>
+          ) : (
+            <div onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp} className="flex h-8 w-full cursor-grab items-center justify-center active:cursor-grabbing">
+              <div className="h-1 w-10 rounded-full bg-slate-300" />
+            </div>
+          )}
         </div>
         <div
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y px-4 pb-3"

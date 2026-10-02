@@ -194,8 +194,22 @@ export default function Ride() {
   const [paymentMethod, setPaymentMethod] = useState(null) // 'cash' | 'transfer'
   const [customPrices, setCustomPrices] = useState({}) // { optionId: price }
   const [searchCountdown, setSearchCountdown] = useState(SEARCH_COUNTDOWN_MS / 1000)
+  // The ride we are hunting a rider for. Kept in a ref so "Try again" can
+  // restart the search even when no rider ever matched (matchedRider is null
+  // in exactly the timed-out case, which is the only case retry is shown in).
+  const searchingRideRef = useRef(null)
+  // Bumped to restart the polling effect without changing the ride id.
+  const [searchAttempt, setSearchAttempt] = useState(0)
 
   const store = useStore((s) => s)
+
+  // Exactly one bottom sheet can own the screen at a time. Every sheet reports
+  // its measured height so the map behind it can be pushed up by exactly that
+  // much; without a single owner the previous sheet's "I'm gone" report (0)
+  // races the new sheet's first report and the map ends up at the wrong height
+  // — the route then renders underneath the drawer instead of above it.
+  const sheetOwner =
+    searchingRideId || matchedRider ? 'search' : paymentStep ? 'payment' : ridePick ? 'pick' : null
 
   // How much of the screen a mobile bottom sheet is currently occupying
   // (real measured px, reported by MobileDrawer / RiderSearchDrawer). The
@@ -203,10 +217,23 @@ export default function Ride() {
   // can never sit on top of the pickup/dropoff markers.
   const [sheetOffsetPx, setSheetOffsetPx] = useState(0)
   const [sheetDragging, setSheetDragging] = useState(false)
-  const handleSheetHeightChange = useCallback((px, dragging = true) => {
+  const applySheetHeight = useCallback((owner, px, dragging) => {
+    if (owner !== sheetOwner) return
     setSheetOffsetPx(px)
     setSheetDragging(Boolean(dragging))
-  }, [])
+  }, [sheetOwner])
+  const sheetHandlers = useMemo(() => ({
+    pick: (px, dragging) => applySheetHeight('pick', px, dragging),
+    payment: (px, dragging) => applySheetHeight('payment', px, dragging),
+    search: (px, dragging) => applySheetHeight('search', px, dragging),
+  }), [applySheetHeight])
+
+  // No sheet open at all — drop the offset so the map fills the screen again.
+  useEffect(() => {
+    if (sheetOwner) return
+    setSheetOffsetPx(0)
+    setSheetDragging(false)
+  }, [sheetOwner])
 
   // Calculate dynamic prices based on distance
   const distanceKm = useMemo(() => {
@@ -251,23 +278,28 @@ const [activeRide, setActiveRide] = useState(null)
   const livePickup = pickupCoords
   const liveDropoff = dropoffCoords
 const liveRider = activeRide?.rider || null
- const liveCourierInfo = activeRide
-  ? {
-      riderName:
-        activeRide.rider?.name ||
-        activeRide.riderName ||
-        'Driver en route',
+ // Memoised on purpose: this object lands in DeliveryMap's courier effect deps,
+ // so a fresh identity on every render re-triggers the car's glide + panTo and
+ // the marker visibly stutters instead of travelling.
+ const liveCourierInfo = useMemo(() => (
+   activeRide
+     ? {
+         riderName:
+           activeRide.rider?.name ||
+           activeRide.riderName ||
+           'Driver en route',
 
-      rideType:
-        activeRide.rideType,
+         rideType:
+           activeRide.rideType,
 
-      plateNumber:
-        activeRide.rider?.plateNumber,
+         plateNumber:
+           activeRide.rider?.plateNumber,
 
-      phone:
-        activeRide.rider?.phone,
-    }
-  : null
+         phone:
+           activeRide.rider?.phone,
+       }
+     : null
+ ), [activeRide])
 useEffect(() => {
   if (!searchingRideId) return
 
@@ -339,7 +371,7 @@ useEffect(() => {
     window.clearTimeout(pollTimer)
     window.clearTimeout(timeoutTimer)
   }
-}, [searchingRideId])
+}, [searchingRideId, searchAttempt])
   // Keep the map markers in sync with whatever the user types.
   const t1 = useRef(null)
   useEffect(() => {
@@ -405,9 +437,15 @@ async function confirmRide() {
     setRidePick(false)
     setPaymentStep(false)
 
-    setSearchingRideId(
-      ride._id || ride.id
-    )
+    const rideId = ride?._id || ride?.id
+    if (!rideId) {
+      setErrorMessage('This ride could not be started. Please try again.')
+      return
+    }
+
+    searchingRideRef.current = rideId
+    setSearchingRideId(rideId)
+    setSearchAttempt((n) => n + 1)
   }
    catch (error) {
     console.error(
@@ -423,6 +461,7 @@ async function confirmRide() {
 async function cancelRiderSearch() {
   const rideId =
     searchingRideId ||
+    searchingRideRef.current ||
     matchedRider?._id ||
     matchedRider?.id
 
@@ -436,6 +475,7 @@ async function cancelRiderSearch() {
     }
   }
 
+  searchingRideRef.current = null
   setSearchingRideId(null)
   setMatchedRider(null)
   setTimedOut(false)
@@ -443,13 +483,13 @@ async function cancelRiderSearch() {
 }
 
 function handleRetrySearch() {
+  const rideId = searchingRideRef.current || searchingRideId
+  if (!rideId) return
   setTimedOut(false)
-  setIsSearching(true)
-  // Restart the search by re-setting the searchingRideId
-  // We need to re-create the ride or restart the search
-  if (matchedRider?._id || matchedRider?.id) {
-    setSearchingRideId(matchedRider._id || matchedRider.id)
-  }
+  setSearchingRideId(rideId)
+  // Same id, fresh polling loop — without the attempt bump the effect above
+  // would not re-run and "Try again" would do nothing at all.
+  setSearchAttempt((n) => n + 1)
 }
 
 function confirmMatchedRide() {
@@ -524,6 +564,16 @@ function confirmMatchedRide() {
     </div>
   )
 
+  // The whole booking/search flow runs over ONE persistent map. Tearing it
+  // down between steps (which is what gating on the individual step flags
+  // does) destroys the Google map instance and forces a fresh Directions
+  // request + fitBounds on the way back in — the route visibly vanishes and
+  // snaps back. `flowActive` stays true from "See prices" until the search
+  // card is dismissed, so the map simply gets pushed around instead.
+  const flowActive = Boolean(
+    sheetOwner || showModal || loading || isSearching,
+  )
+
   return (
     <AppShell hideMobileHeader>
       <main className="mx-auto flex flex-col gap-6 px-4 py-4 lg:mt-4 md:mt-4 sm:px-6 lg:grid lg:grid-cols-2 ">
@@ -583,7 +633,7 @@ function confirmMatchedRide() {
         </section>
       </main>
 
-      {!showModal && !searchingRideId && !matchedRider && (
+      {!flowActive && (
         <MobileRouteMap
           pickup={activeRide ? livePickup : pickupCoords}
           dropoff={activeRide ? liveDropoff : dropoffCoords}
@@ -600,7 +650,7 @@ function confirmMatchedRide() {
       {/* Mobile confirmation: a single persistent map, pushed up by whichever
           sheet is currently open, so pickup/dropoff markers stay visible
           and never end up hidden behind the sheet. */}
-      {(showModal || paymentStep || searchingRideId || matchedRider) && (
+      {(flowActive || searchingRideId || matchedRider) && (
         <>
           <div
             className={`fixed inset-x-0 top-0 z-100 lg:hidden ${sheetDragging ? '' : 'transition-[bottom] duration-200 ease-out'}`}
@@ -621,7 +671,7 @@ function confirmMatchedRide() {
 
           {ridePick && (
             <MobileDrawer
-              onHeightChange={handleSheetHeightChange}
+              onHeightChange={sheetHandlers.pick}
               footer={(
                 <button
                   onClick={() => { setRidePick(false); setShowModal(false); setErrorMessage(''); setPaymentStep(true) }}
@@ -682,7 +732,8 @@ function confirmMatchedRide() {
               type has been picked and before the rider search begins. ── */}
           {paymentStep && (
             <MobileDrawer
-              onHeightChange={handleSheetHeightChange}
+              fitContent
+              onHeightChange={sheetHandlers.payment}
               footer={(
                 <button
                   onClick={() => confirmRide()}
@@ -805,12 +856,12 @@ function confirmMatchedRide() {
           )}
         </>
       )}
-      {(searchingRideId || matchedRider || isSearching) && (
+      {(searchingRideId || matchedRider) && (
         <RiderSearchDrawer
           rider={matchedRider ? liveRider || { name: matchedRider.riderName } : null}
           onCancel={cancelRiderSearch}
           onConfirm={confirmMatchedRide}
-          onHeightChange={handleSheetHeightChange}
+          onHeightChange={sheetHandlers.search}
           onRetry={handleRetrySearch}
           timedOut={timedOut}
           countdown={searchCountdown}
