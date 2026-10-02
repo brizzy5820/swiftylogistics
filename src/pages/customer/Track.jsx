@@ -394,7 +394,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
     return (
       <div className='flex flex-col gap-3 ' >
         {/* Status card */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl bg-gray-100 p-6">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Status</p>
@@ -448,7 +448,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
         </div>
 
         {/* Courier card */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-2xl  bg-gray-100 p-6">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Your courier</p>
           <div className="mt-3 flex items-center gap-4">
             <div className="size-12 rounded-xl bg-emerald-50 flex items-center justify-center font-bold text-emerald-600">
@@ -487,7 +487,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
         </div>
 
         {/* Delivery details card */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm space-y-3">
+        <div className="rounded-2xl  bg-gray-100 p-6  space-y-3">
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-slate-400">From</p>
             <p className="text-sm font-medium">{deliveryView.pickup.address}</p>
@@ -530,6 +530,7 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
 
   return (
     <>
+
       {/* ── Mobile: full-bleed map with a draggable bottom sheet ── */}
    <div className="lg:hidden h-full">
    <div className={`fixed inset-x-0 top-0 z-100 lg:hidden ${sheetDragging ? '' : 'transition-[bottom] duration-200 ease-out'}`}>
