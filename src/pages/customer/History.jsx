@@ -1,5 +1,5 @@
-import { Link, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
+import { Link, useNavigate,  useParams } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import {
   ArrowLeft,
   CheckCircle,
@@ -44,20 +44,42 @@ export default function History() {
   const deliveries = useStore((s) => (currentUser ? s.deliveries.filter((d) => d.customerId === currentUser.id) : []))
   const [activeDelivery, setActiveDelivery] = useState(null)
   const [open, setOpen] = useState(false)
-
+  const { id } = useParams()
   if (!currentUser) return null
-
+  const [detailLoading, setDetailLoading] = useState(true)
   const pending = deliveries.filter((d) => d.status === 'pending')
   const active = deliveries.filter((d) => d.status !== 'delivered' && d.status !== 'cancelled')
   const completed = deliveries.filter((d) => d.status === 'delivered')
   const sortedDeliveries = [...deliveries].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
-
+  useEffect(() => {
+    if (!id) return
+    setDetailLoading(true)
+    const timer = setTimeout(() => setDetailLoading(false), 300)
+    return () => clearTimeout(timer)
+  }, [id])
+  if (!user) return null
   function handleBack() {
     if (window.history.state && window.history.state.idx > 0) {
       navigate(-1)
     } else {
       navigate('/customer')
     }
+  }
+ // Show skeleton while loading detail
+  if (id && (detailLoading)) {
+    return (
+      <AppShell hideMobileHeader>
+        <main className="mx-auto grid max-w-7xl grid-cols-1 gap-6 p-6 lg:grid-cols-12">
+          <aside className="space-y-6 lg:col-span-4">
+            <SkeletonCard className="p-6" />
+            <SkeletonCard className="p-6" />
+          </aside>
+          <section className="h-[50vh] overflow-hidden rounded-3xl border border-slate-200 sm:h-[60vh] lg:sticky lg:top-24 lg:col-span-8 lg:h-[calc(100vh-7rem)]">
+            <Skeleton className="h-full w-full" />
+          </section>
+        </main>
+      </AppShell>
+    )
   }
 
   function openInvoice(delivery) {

@@ -7,7 +7,7 @@ import { AppShell } from '../../components/app-shell'
 const ACTIONS = [
   { to: '/customer/ride', title: 'Book a ride', subtitle: 'A car is minutes away', image: '/carinterface.png', Icon: CarFront },
   { to: '/customer/book', title: 'Send a package', subtitle: 'Pickup & delivery', image: '/deliveryinterface.png', Icon: PackageCheck },
-  { to: '/customer/schedule', title: 'Schedule delivery', subtitle: 'Plan it for later', image: '',Icon: Calendar },
+  { to: '/customer/schedule', title: 'Schedule delivery', subtitle: 'Plan it for later', image: '/scheduleinterface.png',Icon: Calendar },
   { to: '/customer/track', title: 'Track an order', subtitle: 'Follow it live', image: '/trackinterface.png', Icon: MapPin },
 ]
 

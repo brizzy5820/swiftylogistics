@@ -493,10 +493,15 @@ export function DeliveryMap({
 
     const target = destination || dropoff
     const kmLeft = courier && target ? Math.round(haversineKm(courier, target) * 10) / 10 : null
-    const riderName = courierInfo?.riderName || 'Driver en route'
-    const riderVehicle = courierInfo?.vehicleType || courierInfo?.rideType || ''
-    const riderPlate = courierInfo?.plateNumber || ''
-    const riderPhone = courierInfo?.phone || ''
+    // Read through the ref: `courierInfo` is an inline object at nearly every
+    // call site, so depending on it directly re-ran this effect on every render
+    // — restarting the glide below and re-panning mid-flight, which is exactly
+    // the stutter this map is supposed to never show.
+    const info = courierInfoRef.current
+    const riderName = info?.riderName || 'Driver en route'
+    const riderVehicle = info?.vehicleType || info?.rideType || ''
+    const riderPlate = info?.plateNumber || ''
+    const riderPhone = info?.phone || ''
 
     carInfoRef.current = {
       position: courier ? { lat: courier.lat, lng: courier.lng } : null,
@@ -543,13 +548,19 @@ export function DeliveryMap({
       const from = carRef.current.position
       const fromPlain = { lat: from.lat(), lng: from.lng() }
       const toPlain = { lat: to.lat(), lng: to.lng() }
-      carRef.current.setRotation(bearingDegrees(fromPlain, toPlain))
-      animateOverlay(G, carRef.current, fromPlain, toPlain)
+      // Already sitting on the target: skip the glide. Restarting a 900ms
+      // animation towards a point it is already at is what makes the car
+      // hover in place instead of travelling.
+      const gap = haversineKm(fromPlain, toPlain)
+      if (gap > 0.00005) {
+        carRef.current.setRotation(bearingDegrees(fromPlain, toPlain))
+        animateOverlay(G, carRef.current, fromPlain, toPlain)
+      }
     }
 
     const view = map.getBounds()
     if (view && !view.contains(to)) map.panTo(to)
-  }, [courier?.lat, courier?.lng, courierInfo, destination, dropoff])
+  }, [courier?.lat, courier?.lng, destination, dropoff])
 
   const showMapSkeleton = useDelayedLoading(!mapReady && !error)
 

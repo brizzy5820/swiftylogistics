@@ -1,16 +1,16 @@
 import { ArrowUpRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
-
+import { ShimmerImage } from '@/components/shimmer-image'
 const ACTIONS = [
-  { to: '/customer/ride', title: 'Book a ride', subtitle: 'A car is minutes away', image: '/carinterface.png' },
-  { to: '/customer/book', title: 'Send a package', subtitle: 'Pickup and delivery',image: '/deliveryinterface.png' },
-  { to: '/customer/track', title: 'Track something', subtitle: 'Follow an active order', image: 'trackinterface.png' },
+  { to: '/customer/ride', title: 'Book a ride', subtitle: 'A car is minutes away', image: '/carinterface.png', alt:"book a ride" },
+  { to: '/customer/book', title: 'Send a package', subtitle: 'Pickup and delivery',image: '/deliveryinterface.png',  alt:"book a delivery" },
+  { to: '/customer/track', title: 'Track something', subtitle: 'Follow an active order', image: 'trackinterface.png' ,alt:"track package/ride" },
 ]
 
 const ACTIONSII = [
-  { to: '/customer/ride', title: 'Ride', image: '/carinterface.png' },
-  { to: '/customer/book', title: 'Delivery', image: '/deliveryinterface.png' },
-  { to: '/customer/track', title: 'Track', image: 'trackinterface.png' },
+  { to: '/customer/ride', title: 'Ride', image: '/carinterface.png' ,  alt:"book a ride"},
+  { to: '/customer/book', title: 'Delivery', image: '/deliveryinterface.png', alt:"book a delivery" },
+  { to: '/customer/track', title: 'Track', image: 'trackinterface.png', alt:"track package/ride" },
   
 ]
 
@@ -38,7 +38,7 @@ function Action({ to, title, subtitle, primary, image }) {
       }`}
     >
       <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden">
-        <img src={image} alt="" className="h-full w-full object-contain" />
+        <ShimmerImage src={image} alt="" className="h-full w-full object-contain" />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-bold">{title}</span>
@@ -52,9 +52,9 @@ function Action({ to, title, subtitle, primary, image }) {
 // No container, no ring — just a bigger image and a label, evenly spaced.
 function MiniAction({ to, title, image }) {
   return (
-    <Link to={to} className="flex flex-1 flex-col items-center gap-2  transition active:scale-95">
+    <Link to={to} className="flex flex-1 flex-col items-center gap-2  transition  active:scale-95">
       <span className="flex h-23 w-23  p-3  rounded-2xl  bg-gray-100 items-center justify-center">
-        <img src={image} alt="" className="h-full w-full object-contain" />
+        <ShimmerImage src={image} alt="" className="h-full w-full object-contain" />
       </span>
       <span className="text-xs font-bold text-slate-900">{title}</span>
     </Link>

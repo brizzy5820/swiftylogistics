@@ -10,7 +10,7 @@ import { ChatPanel, ChatLauncher, useChatThread, ChatMessageList, ChatComposer }
 import { useStore, useCurrentUser, updateDeliveryStatus, confirmOrder, STATUS_LABEL } from '@/lib/api-store'
 import { getErrorMessage, getPublicTracking } from '@/services/api'
 import { getSocket } from '@/lib/socket'
-import { Skeleton, SkeletonText, SkeletonCard, SkeletonAvatar, SkeletonMap, SkeletonListItem } from '@/components/ui/skeleton'
+import { Skeleton, SkeletonCard, SkeletonMap, SkeletonListItem } from '@/components/ui/skeleton'
 import { useSimulatedCourierPosition } from '@/lib/use-simulated-courier'
 
 function formatTime(ts) {
@@ -26,28 +26,59 @@ export default function Track() {
   const navigate = useNavigate()
   const location = useLocation()
   const [copied, setCopied] = useState(false)
-  const [lookupSettled, setLookupSettled] = useState(false)
   const [trackingCode, setTrackingCode] = useState('')
   const [outcomeBannerDismissed, setOutcomeBannerDismissed] = useState(false)
   const [publicDelivery, setPublicDelivery] = useState(null)
+  // Set once a tracking-code lookup has actually come back — with a trip or
+  // with nothing. This is the only honest "we've checked" signal: the old
+  // `lookupSettled` timer flipped 600ms after mount no matter what the request
+  // was doing, so a slow lookup reported "No shipment found" mid-fetch.
+  const [trackingSettled, setTrackingSettled] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [chatOpen, setChatOpen] = useState(false)
   const [chatUnread, setChatUnread] = useState(false)
   const deliveries = useStore((s) => (user ? s.deliveries.filter((d) => d.customerId === user.id) : []))
-  const delivery = useStore((s) => s.deliveries.find((d) => d.id === id || d.aciveTrackingId === id))
+  const delivery = useStore((s) => s.deliveries.find((d) => d.id === id || d.trackingId === id))
+  const storeHydrated = useStore((s) => s.hydrated)
   const pollingRef = useRef(null)
   const confirmedRef = useRef(new Set())
 
+  const isTrackingCode = Boolean(id && (id.startsWith('TRK-') || id.startsWith('RIDE-')))
+  // A tracking code is only ever resolvable by asking the server; anything
+  // else has to come out of the store, which is still filling on first paint.
+  const needsPublicLookup = Boolean(id && !delivery && isTrackingCode)
+  // "We have looked and there is nothing here" — as opposed to "we haven't
+  // looked yet". Both branches must be genuinely finished: the request settled,
+  // or the store finished hydrating and the id still isn't in it.
+  const lookupSettled = trackingSettled || (!needsPublicLookup && (storeHydrated || !user) && !loading)
+
+  // Reset the previous id's outcome before anything resolves the new one.
   useEffect(() => {
-    if (!id || delivery || !id.startsWith('TRK-') && !id.startsWith('RIDE-')) return
+    setTrackingSettled(false)
+    setErrorMessage('')
+  }, [id])
+
+  useEffect(() => {
+    if (!needsPublicLookup) return
     let active = true
-    getPublicTracking(id).then((data) => { if (active) setPublicDelivery(data.tracking) }).catch((error) => {
+    setTrackingSettled(false)
+    getPublicTracking(id).then((data) => { if (active) setPublicDelivery(data?.tracking || null) }).catch((error) => {
       if (active) setErrorMessage(getErrorMessage(error, 'Unable to load tracking details.'))
+    }).finally(() => {
+      if (active) setTrackingSettled(true)
     })
     return () => { active = false }
-  }, [id, delivery])
+  }, [id, needsPublicLookup])
   
   const effectiveDelivery = delivery || publicDelivery
+  // A tracking payload can arrive before its route does (or, for a very fresh
+  // booking, without one). Read the route defensively so the map degrades to a
+  // placeholder instead of throwing a blank screen on a partially loaded trip.
+  const pickupCoords = effectiveDelivery?.pickup?.coords
+  const dropoffCoords = effectiveDelivery?.dropoff?.coords
+  const pickupAddress = effectiveDelivery?.pickup?.address
+  const dropoffAddress = effectiveDelivery?.dropoff?.address
+  const hasRoute = Boolean(pickupCoords && dropoffCoords)
   const trackingId = location.state?.trackingId ?? effectiveDelivery?.trackingId ?? id
   const deliveryId = effectiveDelivery?.id
   const deliveryView = effectiveDelivery
@@ -130,12 +161,6 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
   // from their dashboard. The store's listener system broadcasts changes here reactively.
 
   useEffect(() => {
-    setLookupSettled(false)
-    const timeout = window.setTimeout(() => setLookupSettled(true), 600)
-    return () => window.clearTimeout(timeout)
-  }, [id])
-
-  useEffect(() => {
     if (!copied) return
     const timeout = window.setTimeout(() => setCopied(false), 1800)
     return () => window.clearTimeout(timeout)
@@ -194,12 +219,12 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
 
   const handleBack = () => {
      if(id){
-        navigate('/customer/history')
+        navigate('/customer')
     }
     else if (window.history.state && window.history.state.idx > 0) {
       navigate(-1)
     } else {
-      navigate('/customer/history')
+      navigate('/customer')
     }
    
   }
@@ -232,22 +257,24 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
       : orderedDeliveries
 
     return (
-      <AppShell>
+      <AppShell hideMobileHeader>
         <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-          <button
+         
+          <div className="mb-6 flex flex-col gap-2">
+           <div className="flex  gap-3 items-center">
+             <button
             type="button"
             onClick={handleBack}
             aria-label="Go back"
-            className="mb-5 inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-900"
+            className=" inline-flex  items-center justify-center text-slate-600  transition hover:bg-slate-50 hover:text-slate-900"
           >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <div className="mb-6 flex flex-col gap-2">
-            <h1 className="text-2xl text-left sm:text-left font-bold text-slate-900">Track </h1>
+            <ArrowLeft className="h-6 w-6" />
+          </button> <h1 className="text-2xl text-left sm:text-left font-bold text-slate-900">Track </h1>
+           </div>
             <p className="text-sm  text-left text-slate-500">Track a delivery to receive package</p>
           </div>
 
-          <form onSubmit={handleTrackLookup} className="mb-6 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex sm:items-center sm:gap-3">
+          <form onSubmit={handleTrackLookup} className="mb-6 rounded-2xl  bg-white p-3 shadow-sm sm:flex sm:items-center sm:gap-3">
             <div className="relative min-w-0 flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -304,17 +331,14 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
     )
   }
 
-  if (!effectiveDelivery && !lookupSettled)
-    return (
-      <AppShell>
-        <main className="mx-auto flex max-w-3xl flex-col items-center justify-center px-6 py-12 text-center">
-          <SkeletonAvatar size="xl" className="mx-auto" />
-          <SkeletonText lines={2} className="mt-4 max-w-md mx-auto" />
-        </main>
-      </AppShell>
-    )
+// Still resolving: keep the placeholder up. "No shipment found" is only ever
+// reached from here, once a lookup has genuinely finished without a match —
+// so it can never flash while a fetch is still running or the store is still
+// hydrating.
+if (!effectiveDelivery && !lookupSettled)
+    return <TrackSkeleton />
 
-  if (!effectiveDelivery)
+if (!effectiveDelivery)
     return (
       <AppShell>
         <main className="mx-auto flex  max-w-3xl flex-col items-center justify-center px-6 py-12 text-center">
@@ -543,16 +567,20 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
       className={`fixed inset-x-0 top-0 ${sheetDragging ? '' : 'transition-[bottom] duration-200 ease-out'}`}
       style={{ bottom: sheetHeightPx }}
     >
-      <DeliveryMap
-        pickup={deliveryView.pickup.coords}
-        dropoff={deliveryView.dropoff.coords}
-        courier={simulatedCourier}
-        courierInfo={{ riderName: deliveryView.riderName, rideType: deliveryView.rideType, phone: deliveryView.rider?.phone }}
-        destination={deliveryView.dropoff.coords}
-        pickupAddress={deliveryView.pickup.address}
-        dropoffAddress={deliveryView.dropoff.address}
-        className="h-full w-full"
-      />
+      {hasRoute ? (
+        <DeliveryMap
+          pickup={pickupCoords}
+          dropoff={dropoffCoords}
+          courier={simulatedCourier}
+          courierInfo={{ riderName: deliveryView.riderName, rideType: deliveryView.rideType, phone: deliveryView.rider?.phone }}
+          destination={dropoffCoords}
+          pickupAddress={pickupAddress}
+          dropoffAddress={dropoffAddress}
+          className="h-full w-full"
+        />
+      ) : (
+        <SkeletonMap className="h-full w-full rounded-none" />
+      )}
     </div>
 
     <div className="relative  flex items-center justify-between p-4">
@@ -650,6 +678,111 @@ const handleSheetHeightChange = useCallback((px, dragging = true) => {
           onOpenChange={setChatOpen}
         />
       )}
+    </>
+  )
+}
+
+// ── Loading state ──────────────────────────────────────────────────────────
+// Mirrors the real page 1:1 — same mobile "map behind a bottom sheet" split at
+// the drawer's default snap, same 4/8 desktop grid — so the layout the customer
+// lands on once the trip arrives is pixel-identical to the placeholder and
+// nothing jumps mid-fetch.
+function DetailPanelSkeleton() {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="rounded-2xl bg-gray-100 p-6">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="mt-2 h-7 w-32" />
+          </div>
+          <Skeleton className="h-8 w-24 rounded-full" />
+        </div>
+        <Skeleton className="mt-3 h-3.5 w-48" />
+        <Skeleton className="mt-2 h-3.5 w-28" />
+        <ol className="mt-6 space-y-3">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <li key={i} className="flex items-start gap-3">
+              <Skeleton className="mt-0.5 h-7 w-7 shrink-0 rounded-full" />
+              <div className="min-w-0 flex-1">
+                <Skeleton className="h-3.5 w-32" />
+                <Skeleton className="mt-2 h-2.5 w-20" />
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <div className="rounded-2xl bg-gray-100 p-6">
+        <Skeleton className="h-3 w-24" />
+        <div className="mt-3 flex items-center gap-4">
+          <Skeleton className="size-12 rounded-xl" />
+          <div className="min-w-0 flex-1">
+            <Skeleton className="h-4 w-36" />
+            <Skeleton className="mt-2 h-3 w-28" />
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-3 rounded-2xl bg-gray-100 p-6">
+        <div>
+          <Skeleton className="h-3 w-14" />
+          <Skeleton className="mt-2 h-3.5 w-full" />
+        </div>
+        <div>
+          <Skeleton className="h-3 w-10" />
+          <Skeleton className="mt-2 h-3.5 w-4/5" />
+        </div>
+        <div className="flex items-center justify-between border-t border-slate-200 pt-3">
+          <Skeleton className="h-3.5 w-40" />
+          <Skeleton className="h-4 w-16" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function TrackSkeleton() {
+  return (
+    <>
+      {/* Mobile: map placeholder, cut at the drawer's default snap (52vh,
+          same value the real MobileDrawer uses) with a sheet-shaped
+          placeholder below it. */}
+      <div className="h-full lg:hidden">
+        <div className="fixed inset-x-0 top-0 bottom-[52vh]">
+          <SkeletonMap className="h-full w-full rounded-none" />
+          <div className="absolute left-4 top-4 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-300 shadow-sm">
+            <ArrowLeft className="h-5 w-5" />
+          </div>
+        </div>
+
+        <div className="fixed inset-x-0 bottom-0 flex h-[52vh] flex-col rounded-t-3xl bg-white shadow-2xl">
+          <div className="flex shrink-0 items-center justify-center px-4 pb-2 pt-3">
+            <div className="h-1 w-10 rounded-full bg-slate-300" />
+          </div>
+          <div className="min-h-0 flex-1 overflow-hidden px-4 pb-3">
+            <DetailPanelSkeleton />
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop: same 4/8 split and sticky map height as the real page. */}
+      <main className="mx-auto hidden max-w-7xl px-4 py-3 sm:px-6 lg:block lg:px-8">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          <aside className="space-y-6 lg:col-span-4">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-300">
+                <ArrowLeft className="h-6 w-6" />
+              </span>
+              <Skeleton className="h-4 w-36 rounded-full" />
+            </div>
+            <DetailPanelSkeleton />
+          </aside>
+          <section className="relative h-[50vh] sm:h-[60vh] lg:sticky lg:top-24 lg:col-span-8 lg:h-[calc(100vh-7rem)]">
+            <SkeletonMap className="h-full w-full" />
+          </section>
+        </div>
+      </main>
     </>
   )
 }

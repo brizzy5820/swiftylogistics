@@ -578,7 +578,7 @@ function confirmMatchedRide() {
     <AppShell hideMobileHeader>
       <main className="mx-auto flex flex-col gap-6 px-4 py-4 lg:mt-4 md:mt-4 sm:px-6 lg:grid lg:grid-cols-2 ">
         {/* Left: route form */}
-        <section className="overflow-visible rounded-3xl md:px-3 sm:p-8">
+        <section className="overflow-visible rounded-3xl  sm:p-8">
            <div className="max-w-lg gap-3  flex items-center">
             {/* <p className="text-sm font-bold uppercase tracking-wider text-emerald-700">Ride with Swifty</p> */}
             <Link to="/customer" className='lg:hidden mt-2' ><ChevronLeftIcon className='w-6 h-6'/></Link>
