@@ -56,6 +56,7 @@ export default function CustomerDashboard() {
     )
   }
   const firstName = currentUser.name.split(' ')[0]
+  const secondName=  currentUser.name.split(' ')[1]
   const recent = deliveries.slice(0, 2)
 
   return (
@@ -165,7 +166,7 @@ export default function CustomerDashboard() {
           <input
             className="w-full flex-1 bg-transparent py-4 text-sm outline-none placeholder:text-slate-500"
             type="text"
-            placeholder="Where to?"
+            placeholder={`Where to? ${secondName}`}
           />
           <button
             type="button"
