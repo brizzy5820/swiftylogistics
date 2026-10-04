@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Calendar, Clock, MapPin, PackageCheck, ArrowLeft, X } from 'lucide-react'
 import { useRequireAuth } from '../../lib/use-require-auth'
 import { scheduleDelivery, cancelScheduled, useStore } from '../../lib/api-store'
 import { AppShell } from '../../components/app-shell'
 import { DeliveryMap } from '../../components/delivery-map'
-import { resolveAddressCoords, reverseGeocode } from '../../lib/address-suggestions'
+import { LocationField } from '../../components/location-field'
+import { resolveAddressCoords } from '../../lib/address-suggestions'
 
 const PACKAGE_TYPES = ['Express', 'Cargo', 'Electric']
 const TIME_SLOTS = [
@@ -45,22 +46,35 @@ export default function Schedule() {
   const [note, setNote] = useState('')
   const [submitted, setSubmitted] = useState(null)
   const [error, setError] = useState('')
+  // Detected once by the pickup field and shared with the dropoff field so both
+  // rank suggestions by the same "near you" ordering, exactly like Book/Ride.
+  const [userLocation, setUserLocation] = useState(null)
 
   const scheduled = useStore((s) => (s.scheduled ?? []).filter((sc) => sc.customerId === user?.id).sort((a, b) => a.scheduledFor - b.scheduledFor))
 
-  // Geocode when pickup/dropoff text changes
+  // Keep the map in step with free typing too, not only with a picked
+  // suggestion: resolve whatever the manual list can still match, otherwise a
+  // typed-but-unconfirmed address left the map blank.
   useEffect(() => {
-    if (pickup.length < 3) return
+    if (pickup.trim().length < 3) {
+      setPickupCoords(null)
+      return
+    }
     const t = setTimeout(() => {
-      resolveAddressCoords(pickup).then((c) => c && setPickupCoords(c))
+      const c = resolveAddressCoords(pickup, null)
+      if (c) setPickupCoords(c)
     }, 350)
     return () => clearTimeout(t)
   }, [pickup])
 
   useEffect(() => {
-    if (dropoff.length < 3) return
+    if (dropoff.trim().length < 3) {
+      setDropoffCoords(null)
+      return
+    }
     const t = setTimeout(() => {
-      resolveAddressCoords(dropoff).then((c) => c && setDropoffCoords(c))
+      const c = resolveAddressCoords(dropoff, null)
+      if (c) setDropoffCoords(c)
     }, 350)
     return () => clearTimeout(t)
   }, [dropoff])
@@ -178,17 +192,26 @@ export default function Schedule() {
                 <div className="rounded-2xl border border-slate-200 bg-white p-4">
                   <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Route</p>
                   <div className="mt-3 space-y-3">
-                    <AddressField
+                    <LocationField
+                      variant="pickup"
                       label="Pickup address"
                       value={pickup}
                       onChange={setPickup}
                       onCoords={setPickupCoords}
+                      placeholder="Pickup location"
+                      userCoords={userLocation?.coords}
+                      userLga={userLocation?.details?.lga}
+                      onUserLocationDetected={setUserLocation}
                     />
-                    <AddressField
+                    <LocationField
+                      variant="dropoff"
                       label="Dropoff address"
                       value={dropoff}
                       onChange={setDropoff}
                       onCoords={setDropoffCoords}
+                      placeholder="Dropoff destination"
+                      userCoords={userLocation?.coords}
+                      userLga={userLocation?.details?.lga}
                     />
                   </div>
                 </div>
@@ -293,27 +316,5 @@ export default function Schedule() {
         </div>
       </main>
     </AppShell>
-  )
-}
-
-function AddressField({ label, value, onChange, onCoords }) {
-  return (
-    <div>
-      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</label>
-      <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-        <MapPin className="h-4 w-4 shrink-0 text-emerald-600" />
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="Type an address"
-          className="min-w-0 flex-1 bg-transparent text-sm font-semibold outline-none placeholder:text-slate-400"
-        />
-        {value && (
-          <button onClick={() => onChange('')} className="rounded-full p-1 text-slate-400 hover:bg-white">
-            <X className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
-    </div>
   )
 }

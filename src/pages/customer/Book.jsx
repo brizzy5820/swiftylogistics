@@ -6,14 +6,21 @@ import {
   X,
 } from 'lucide-react'
 import { DeliveryMap } from '../../components/delivery-map'
-import { ADDRESS_SUGGESTIONS, fetchLagosSuggestions, resolveAddressCoords} from '../../lib/address-suggestions'
+import {
+  ADDRESS_SUGGESTIONS,
+  fetchLagosSuggestions,
+  resolveAddressCoords,
+  reverseGeocode,
+  reverseGeocodeDetails,
+  fetchInitialLocationSuggestions,
+  getManualSuggestionsByLocation,
+} from '../../lib/address-suggestions'
 import { AppShell } from '@/components/app-shell'
 import { MobileRouteMap, RouteMapPanel } from '@/components/mobile-route-map'
 import { RiderSearchDrawer, SEARCH_COUNTDOWN_MS } from '@/components/rider-search-drawer'
 import { useRequireAuth } from '@/lib/use-require-auth'
 import { createDelivery, updateDeliveryStatus, useStore } from '@/lib/api-store'
 import { getErrorMessage } from '@/services/api'
-import { reverseGeocode } from '@/lib/address-suggestions'
 import { useSimulatedCourierPosition } from '@/lib/use-simulated-courier'
 
 const SEARCH_TIMEOUT_MS = 60000
@@ -479,51 +486,71 @@ export default function Book() {
 
   /* geolocation */
   const [geoCoords, setGeoCoords]   = useState(null)
-  const [geoLabel, setGeoLabel]     = useState('Detecting location…')
+  const [geoLga, setGeoLga]         = useState(null)
+  const [geoLabel, setGeoLabel]     = useState('Locating your street…')
   const [geoReady, setGeoReady]     = useState(false)
 
   /* ── Geolocation on mount ── */
   useEffect(() => {
-    if (!navigator.geolocation) return
+    if (!navigator.geolocation) {
+      setGeoLabel('Location unavailable')
+      return
+    }
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
         const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude }
         setGeoCoords(coords)
-        setGeoLabel(`Current location (${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)})`)
+        setGeoLabel('Detecting exact street…')
+
+        try {
+          const details = await reverseGeocodeDetails(coords)
+          if (details?.label) {
+            setGeoLabel(details.label)
+            setGeoLga(details.lga || null)
+            fetchInitialLocationSuggestions(coords, details.lga).then((initialList) => {
+              if (initialList && initialList.length > 0) {
+                setPickupSuggestions(initialList)
+                setDropoffSuggestions(initialList)
+              }
+            })
+          } else {
+            setGeoLabel('Current street location')
+          }
+        } catch {
+          setGeoLabel('Current street location')
+        }
         setGeoReady(true)
-        reverseGeocode(coords).then((label) => {
-          if (label) setGeoLabel(label)
-        })
       },
-      () => setGeoLabel('Location unavailable')
+      () => setGeoLabel('Location unavailable'),
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 },
     )
   }, [])
 
   useEffect(() => {
     const controller = new AbortController()
     const timer = setTimeout(() => {
-      fetchLagosSuggestions(pickupQuery, controller.signal).then((items) => {
-        if (!controller.signal.aborted) setPickupSuggestions(items)
+      fetchLagosSuggestions(pickupQuery, { userCoords: geoCoords, userLga: geoLga }, controller.signal).then((items) => {
+        if (!controller.signal.aborted && items) setPickupSuggestions(items)
       })
     }, 250)
     return () => {
       controller.abort()
       clearTimeout(timer)
     }
-  }, [pickupQuery])
+  }, [pickupQuery, geoCoords, geoLga])
 
   useEffect(() => {
     const controller = new AbortController()
     const timer = setTimeout(() => {
-      fetchLagosSuggestions(dropoffQuery, controller.signal).then((items) => {
-        if (!controller.signal.aborted) setDropoffSuggestions(items)
+      fetchLagosSuggestions(dropoffQuery, { userCoords: geoCoords, userLga: geoLga }, controller.signal).then((items) => {
+        if (!controller.signal.aborted && items) setDropoffSuggestions(items)
       })
     }, 250)
     return () => {
       controller.abort()
       clearTimeout(timer)
     }
-  }, [dropoffQuery])
+  }, [dropoffQuery, geoCoords, geoLga])
 
   /* ── Scroll top on step change ── */
   useEffect(() => {

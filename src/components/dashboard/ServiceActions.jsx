@@ -1,6 +1,6 @@
 import { ArrowUpRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { ShimmerImage } from '@/components/shimmer-image'
+// import { ShimmerImage } from '@/components/shimmer-image'
 const ACTIONS = [
   { to: '/customer/ride', title: 'Book a ride', subtitle: 'A car is minutes away', image: '/carinterface.png', alt:"book a ride" },
   { to: '/customer/book', title: 'Send a package', subtitle: 'Pickup and delivery',image: '/deliveryinterface.png',  alt:"book a delivery" },
@@ -27,7 +27,7 @@ export function ServiceActions() {
   )
 }
 
-function Action({ to, title, subtitle, primary, image }) {
+function Action({ to, title, subtitle, primary, image, alt }) {
   return (
     <Link
       to={to}
@@ -38,7 +38,7 @@ function Action({ to, title, subtitle, primary, image }) {
       }`}
     >
       <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden">
-        <ShimmerImage src={image} alt="" className="h-full w-full object-contain" />
+        <img src={image} alt={alt} className="h-full w-full object-contain" />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-bold">{title}</span>
@@ -50,11 +50,11 @@ function Action({ to, title, subtitle, primary, image }) {
 }
 
 // No container, no ring — just a bigger image and a label, evenly spaced.
-function MiniAction({ to, title, image }) {
+function MiniAction({ to, title, image, alt }) {
   return (
     <Link to={to} className="flex flex-1 flex-col items-center gap-2  transition  active:scale-95">
       <span className="flex h-23 w-23  p-3  rounded-2xl  bg-gray-100 items-center justify-center">
-        <ShimmerImage src={image} alt="" className="h-full w-full object-contain" />
+        <img src={image} alt={alt} className="h-full w-full object-contain" />
       </span>
       <span className="text-xs font-bold text-slate-900">{title}</span>
     </Link>

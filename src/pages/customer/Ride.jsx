@@ -7,11 +7,12 @@ import { DeliveryMap } from '../../components/delivery-map'
 import { MobileRouteMap } from '../../components/mobile-route-map'
 import { MobileDrawer } from '../../components/mobile-drawer'
 import { RiderSearchDrawer, SEARCH_COUNTDOWN_MS } from '../../components/rider-search-drawer'
+import { LocationField } from '../../components/location-field'
 import { useRequireAuth } from '../../lib/use-require-auth'
 import { assignAvailableRider, createRide, updateDeliveryStatus, useStore, emit, getStore } from '../../lib/api-store'
 import { getErrorMessage } from '../../services/api'
 import { RIDE_OPTIONS } from '../../data/app-data'
-import { ADDRESS_SUGGESTIONS, fetchLagosSuggestions, resolveAddressCoords, reverseGeocode } from '../../lib/address-suggestions'
+import { fetchLagosSuggestions, resolveAddressCoords } from '../../lib/address-suggestions'
 import { haversineKm } from '../../components/delivery-map'
 import { useSimulatedCourierPosition } from '../../lib/use-simulated-courier'
 
@@ -31,145 +32,6 @@ async function geocode(query) {
   }
 }
 
-// variant: 'pickup' | 'dropoff' — controls marker shape (circle vs square)
-// and whether the "use my location" arrow shows on the right.
-function LocationField({ variant, value, onChange, onCoords, placeholder }) {
-  const isPickup = variant === 'pickup'
-  const [show, setShow] = useState(false)
-  const [items, setItems] = useState(ADDRESS_SUGGESTIONS)
-  const [focused, setFocused] = useState(false)
-  const [geoLabel, setGeoLabel] = useState('Detecting location…')
-  const [geoReady, setGeoReady] = useState(false)
-  const geoCoordsRef = useRef(null)
-  const timer = useRef(null)
-
-  useEffect(() => {
-    if (!isPickup) return
-    if (!navigator.geolocation) { setGeoLabel('Location unavailable'); return }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude }
-        geoCoordsRef.current = coords
-        onCoords?.(coords)
-        setGeoLabel(`Current location (${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)})`)
-        setGeoReady(true)
-        reverseGeocode(coords).then((label) => {
-          if (label) setGeoLabel(label)
-        })
-      },
-      () => setGeoLabel('Location unavailable'),
-    )
-  }, [isPickup, onCoords])
-
-  useEffect(() => {
-    if (timer.current) clearTimeout(timer.current)
-    const controller = new AbortController()
-    timer.current = setTimeout(() => {
-      fetchLagosSuggestions(value, controller.signal).then((nextItems) => {
-        if (!controller.signal.aborted) setItems(nextItems)
-      })
-    }, 300)
-    return () => {
-      controller.abort()
-      if (timer.current) clearTimeout(timer.current)
-    }
-  }, [value])
-
-  function useMyLocation() {
-    if (!geoReady) return
-    onCoords?.(geoCoordsRef.current)
-    onChange(geoLabel)
-    setShow(false)
-  }
-
-  function selectSuggestion(item) {
-    onChange(item.label)
-    onCoords?.(item.coords)
-    setShow(false)
-  }
-
-  return (
-    <div className={`relative ${show ? 'z-30' : 'z-0'}`} style={{ overflow: 'visible' }}>
-      <div
-        className={[
-          'flex items-center gap-3 rounded-xl border bg-slate-100 px-4 py-3.5 transition-colors duration-150',
-          focused ? 'border-emerald-400 shadow-[0_0_0_3px_rgba(16,185,129,0.10)]' : 'border-transparent',
-        ].join(' ')}
-      >
-        <div className="flex h-5 w-5 shrink-0 items-center justify-center">
-          {isPickup ? (
-            <span className="h-3.5 w-3.5 rounded-full border-[2.5px] border-black bg-white" />
-          ) : (
-            <span className="h-3 w-3 bg-black" />
-          )}
-        </div>
-
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onFocus={() => { setFocused(true); setShow(true) }}
-          onBlur={() => { setFocused(false); setTimeout(() => setShow(false), 150) }}
-          placeholder={placeholder}
-          className="w-full bg-transparent text-sm font-semibold text-slate-800 outline-none placeholder:text-slate-400"
-        />
-
-        {value ? (
-          <button
-            type="button"
-            onMouseDown={(e) => { e.preventDefault(); onChange('') }}
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-200"
-            aria-label={`Clear ${isPickup ? 'pickup' : 'dropoff'}`}
-          >
-            <X className="h-4 w-4" />
-          </button>
-        ) : isPickup ? (
-          <button
-            type="button"
-            onMouseDown={(e) => { e.preventDefault(); useMyLocation() }}
-            className="flex h-6 w-6 shrink-0 items-center justify-center text-slate-900 disabled:text-slate-300"
-            disabled={!geoReady}
-            aria-label="Use current location"
-          >
-            <Navigation className="h-4 w-4" />
-          </button>
-        ) : null}
-      </div>
-
-      {show && (
-        <div
-          className="absolute left-0 right-0 top-[calc(100%+8px)] z-[1000] max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl"
-          onMouseDown={(e) => e.preventDefault()}
-        >
-          {geoReady && isPickup && (
-            <button
-              type="button"
-              onClick={() => useMyLocation()}
-              className="flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left hover:bg-emerald-50"
-            >
-              <Navigation className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-              <span className="truncate text-sm font-medium text-emerald-700">{geoLabel}</span>
-            </button>
-          )}
-          {items.length === 0 ? (
-            <p className="px-4 py-3 text-sm text-slate-400">No results</p>
-          ) : (
-            items.map((it) => (
-              <button
-                key={it.label}
-                type="button"
-                onClick={() => selectSuggestion(it)}
-                className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
-              >
-                <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-300" />
-                <span className="truncate">{it.label}</span>
-              </button>
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
 
 export default function Ride() {
   const user = useRequireAuth('customer')
@@ -182,6 +44,7 @@ export default function Ride() {
   const [dropoff, setDropoff] = useState(intent.dropoff || '')
   const [pickupCoords, setPickupCoords] = useState(intent.pickupCoords || null)
   const [dropoffCoords, setDropoffCoords] = useState(intent.dropoffCoords || null)
+  const [userLocation, setUserLocation] = useState(null)
   const [ridePick, setRidePick] = useState(false)
   const [paymentStep, setPaymentStep] = useState(false)
   const [showModal, setShowModal] = useState(false)
@@ -591,8 +454,25 @@ function confirmMatchedRide() {
             <div className="relative space-y-6" style={{ overflow: 'visible' }}>
               {/* Dashed connector: bottom of pickup marker to top of dropoff marker */}
               <div className="pointer-events-none absolute left-[27px] top-[52px] h-6 w-px border-l-2 border-dashed border-slate-300" />
-              <LocationField variant="pickup" value={pickup} onChange={setPickup} onCoords={setPickupCoords} placeholder="Pickup location" />
-              <LocationField variant="dropoff" value={dropoff} onChange={setDropoff} onCoords={setDropoffCoords} placeholder="Dropoff destination" />
+              <LocationField
+                variant="pickup"
+                value={pickup}
+                onChange={setPickup}
+                onCoords={setPickupCoords}
+                placeholder="Pickup location"
+                userCoords={pickupCoords || userLocation?.coords}
+                userLga={userLocation?.details?.lga}
+                onUserLocationDetected={setUserLocation}
+              />
+              <LocationField
+                variant="dropoff"
+                value={dropoff}
+                onChange={setDropoff}
+                onCoords={setDropoffCoords}
+                placeholder="Dropoff destination"
+                userCoords={pickupCoords || userLocation?.coords}
+                userLga={userLocation?.details?.lga}
+              />
             </div>
           </div>
 
