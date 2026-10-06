@@ -78,8 +78,8 @@ export function RiderSearchDrawer({ rider, onCancel, onConfirm, onHeightChange, 
       Confirm ride <ArrowRight className="h-4 w-4" />
     </button>
   ) : timedOut ? null : (
-    <button type="button" onClick={onCancel} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-red-200 py-3 text-sm font-bold text-red-600 transition hover:bg-red-50">
-      <X className="h-4 w-4" /> Cancel search
+    <button type="button" onClick={onCancel} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-red-600 border border-red-200 py-3 text-sm font-bold text-white transition hover:bg-red-500">
+      Cancel search
     </button>
   )
 

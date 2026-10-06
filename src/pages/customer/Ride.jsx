@@ -38,7 +38,7 @@ export default function Ride() {
   const navigate = useNavigate()
   const location = useLocation()
   const intent = location.state || {}
-
+const [bidOpen, setBidOpen] = useState({})
   const [option, setOption] = useState(null)
   const [pickup, setPickup] = useState(intent.pickup || '')
   const [dropoff, setDropoff] = useState(intent.dropoff || '')
@@ -63,7 +63,13 @@ export default function Ride() {
   const searchingRideRef = useRef(null)
   // Bumped to restart the polling effect without changing the ride id.
   const [searchAttempt, setSearchAttempt] = useState(0)
-
+const handleBidToggle = (id) => {
+  setBidOpen((prev) => ({
+    ...prev,
+    [id]: !prev[id],
+  
+  }))
+}
   const store = useStore((s) => s)
 
   // Exactly one bottom sheet can own the screen at a time. Every sheet reports
@@ -376,56 +382,119 @@ function confirmMatchedRide() {
     setCustomPrices(prev => ({ ...prev, [optionId]: newPrice }))
   }
 
-  const rideOptions = (
-    <div className="space-y-3">
-      {RIDE_OPTIONS.map((item) => {
-        const currentPrice = getPriceForOption(item.id)
-        const isSelected = option?.id === item.id
-        return (
-          <button
-            key={item.id}
-            onClick={() => setOption(item)}
-            className={`flex w-full items-center gap-4 rounded-2xl border p-4 text-left transition ${
-              isSelected ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500/10' : 'border-slate-200 bg-white hover:bg-slate-50'
-            }`}
+ const rideOptions = (
+  <div className="w-full space-y-3">
+    {RIDE_OPTIONS.map((item) => {
+      const currentPrice = getPriceForOption(item.id)
+      const isSelected = option?.id === item.id
+      const isBidOpen = !!bidOpen[item.id]
+
+      return (
+        <div
+          key={item.id}
+          className={`w-full overflow-hidden rounded-2xl border transition ${
+            isSelected
+              ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500/10'
+              : 'border-slate-200 bg-white'
+          }`}
+        >
+          {/* MAIN RIDE BAR */}
+          <div
+            onClick={(e) => {
+              e.stopPropagation()
+              handleBidToggle(item.id)
+              setOption(item)
+            }}
+            className="flex w-full min-w-0 cursor-pointer items-center gap-2 p-3 transition sm:gap-4 sm:p-4"
           >
-            <span className="flex h-12 w-14 shrink-0 items-center justify-center rounded-xl"><img src={item.href} className="h-full w-full" alt="" /></span>
+            {/* Vehicle */}
+            <span className="flex h-11 w-12 shrink-0 items-center justify-center rounded-xl sm:h-12 sm:w-14">
+              <img
+                src={item.href}
+                className="h-full w-full object-contain"
+                alt={item.name}
+              />
+            </span>
+
+            {/* Ride details */}
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-bold">{item.name}</span>
-              <span className="mt-1 flex items-center gap-3 text-xs text-slate-500">
-                <span className="flex items-center gap-1"><Clock3 className="h-3 w-3" /> {item.eta} min</span>
-                <span className="flex items-center gap-1"><Users className="h-3 w-3" /> {item.seats}</span>
+              <span className="block truncate text-sm font-bold text-slate-900">
+                {item.name}
+              </span>
+
+              <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                <span className="flex items-center gap-1">
+                  <Clock3 className="h-3 w-3 shrink-0" />
+                  {item.eta} min
+                </span>
+
+                <span className="flex items-center gap-1">
+                  <Users className="h-3 w-3 shrink-0" />
+                  {item.seats}
+                </span>
               </span>
             </span>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 bg-slate-100 rounded-xl px-3 py-2">
+
+            {/* PRICE */}
+            <span className="shrink-0 text-right">
+              <span className="block whitespace-nowrap text-sm font-black text-slate-900">
+                ₦{currentPrice.toLocaleString()}
+              </span>
+            </span>
+
+
+            {/* SELECTED CHECK */}
+            {isSelected && (
+              <Check className="h-4 w-4 shrink-0 text-emerald-600" />
+            )}
+          </div>
+
+          {/* BID CONTROLS */}
+          {isBidOpen && (
+            <div className="flex w-full items-center justify-center border-t border-slate-200 bg-slate-50 px-3 py-3">
+              <div className="flex items-center justify-center gap-4">
+                
+                {/* MINUS */}
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); handlePriceChange(item.id, -1) }}
+                  onClick={() => handlePriceChange(item.id, -1)}
                   disabled={currentPrice <= item.minPrice}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-200 transition"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
                   aria-label="Decrease price"
                 >
                   <Minus className="h-4 w-4" />
                 </button>
-                <span className="w-16 text-center font-bold text-slate-900">₦{currentPrice.toLocaleString()}</span>
+
+                {/* BID PRICE */}
+                <div className="min-w-[100px] text-center">
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Your bid
+                  </span>
+
+                  <span className="block text-sm font-black text-slate-900">
+                    ₦{currentPrice.toLocaleString()}
+                  </span>
+                </div>
+
+                {/* PLUS */}
                 <button
                   type="button"
-                  onClick={(e) => { e.stopPropagation(); handlePriceChange(item.id, 1) }}
+                  onClick={() => handlePriceChange(item.id, 1)}
                   disabled={currentPrice >= item.maxPrice}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-200 transition"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
                   aria-label="Increase price"
                 >
                   <Plus className="h-4 w-4" />
                 </button>
+
               </div>
-              {isSelected && <Check className="mt-1 h-4 w-4 text-emerald-600" />}
             </div>
-          </button>
-        )
-      })}
-    </div>
-  )
+          )}
+        </div>
+      )
+    })}
+  </div>
+)
 
   // The whole booking/search flow runs over ONE persistent map. Tearing it
   // down between steps (which is what gating on the individual step flags
@@ -550,34 +619,60 @@ function confirmMatchedRide() {
           </div>
 
           {ridePick && (
-            <MobileDrawer
-              onHeightChange={sheetHandlers.pick}
-              footer={(
-                <button
-                  onClick={() => { setRidePick(false); setShowModal(false); setErrorMessage(''); setPaymentStep(true) }}
-                  disabled={loading || !option}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-400 disabled:opacity-60"
-                >
-                  Continue <ArrowRight className="h-4 w-4" />
-                </button>
-              )}
-            >
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <h2 className="font-display text-xl font-black text-slate-950">Choose your ride</h2>
-                  <p className="mt-1 text-sm text-slate-500">{pickup || 'My location'} → {dropoff}</p>
-                </div>
-                <button onClick={() => setShowModal(false)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200" aria-label="Close">
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              {errorMessage && (
-                <p className="mb-4 whitespace-pre-line rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">
-                  {errorMessage}
-                </p>
-              )}
-              {rideOptions}
-            </MobileDrawer>
+         <MobileDrawer
+  onHeightChange={sheetHandlers.pick}
+  footer={(
+    <button
+      onClick={() => {
+        setRidePick(false)
+        setShowModal(false)
+        setErrorMessage('')
+        setPaymentStep(true)
+      }}
+      disabled={loading || !option}
+      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-400 disabled:opacity-60"
+    >
+      Continue
+      <ArrowRight className="h-4 w-4" />
+    </button>
+  )}
+>
+  <div className="w-full min-w-0">
+
+    {/* HEADER */}
+    <div className="mb-4 flex items-start justify-between gap-3">
+      <div className="min-w-0 flex-1">
+        <h2 className="font-display text-xl font-black text-slate-950">
+          Choose your ride
+        </h2>
+
+        <p className="mt-1 break-words text-sm text-slate-500">
+          {pickup || 'My location'} → {dropoff}
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => {setRidePick(false), setShowModal(false)}}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
+        aria-label="Close"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+
+    {/* ERROR */}
+    {errorMessage && (
+      <p className="mb-4 whitespace-pre-line rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">
+        {errorMessage}
+      </p>
+    )}
+
+    {/* RIDE OPTIONS */}
+    {rideOptions}
+
+  </div>
+</MobileDrawer>
           )}
 
           {/* Desktop confirmation remains a centered modal. */}
@@ -642,7 +737,7 @@ function confirmMatchedRide() {
                 </p>
               )}
               <div className="mt-5">
-                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">Payment Method</p>
+                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-600">Choose Payment Method</p>
                 <div className="flex gap-3">
                   <button
                     type="button"

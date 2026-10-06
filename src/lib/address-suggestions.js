@@ -1,6 +1,12 @@
 // Enhanced Address Suggestions & Geocoding Service
 // Provides real street-level address detection and suggestions via Geo APIs
 // with seamless fallback to curated manual addresses on fetch failure.
+//
+// Proxied where it has to be: Overpass and Nominatim both refuse requests
+// without a meaningful User-Agent, and browsers cannot set that header, so
+// those lookups go through our own server (see server/src/services/geo.service.js).
+// Photon and BigDataCloud accept browser calls and are still used directly.
+import { API_BASE_URL } from '../services/api'
 
 export const ADDRESS_SUGGESTIONS = [
   // Lagos Mainland (Yaba, Akoka, Ebute Metta)
@@ -201,21 +207,95 @@ const OVERPASS_ENDPOINTS = [
   'https://overpass.kumi.systems/api/interpreter',
 ]
 
+// Public Overpass mirrors are slow and rate-limited: a cold query routinely
+// takes 5–15s, and a busy one can hang until the server-side timeout. Since
+// these lookups sit directly in front of the address autocomplete, every
+// Overpass request is capped at a few seconds and remembered briefly — so a
+// hanging mirror delays nothing, and retyping the same characters costs no
+// extra requests.
+const OVERPASS_TIMEOUT_MS = 3500
+const OVERPASS_CACHE_TTL_MS = 90_000
+const OVERPASS_CACHE_MAX = 60
+const overpassCache = new Map()
+
+function overpassSignal(signal) {
+  const timeout = AbortSignal.timeout(OVERPASS_TIMEOUT_MS)
+  // AbortSignal.any needs a modern browser; fall back to the timeout alone
+  // rather than giving up on the cancellation the caller asked for.
+  if (typeof AbortSignal.any === 'function') {
+    return signal ? AbortSignal.any([signal, timeout]) : timeout
+  }
+  return timeout
+}
+
+function readOverpassCache(query) {
+  const hit = overpassCache.get(query)
+  if (!hit) return undefined
+  if (Date.now() > hit.expires) {
+    overpassCache.delete(query)
+    return undefined
+  }
+  return hit.data
+}
+
+function writeOverpassCache(query, data) {
+  if (overpassCache.size >= OVERPASS_CACHE_MAX) {
+    // Cheap eviction: drop the oldest insertion, which Map preserves for us.
+    const oldest = overpassCache.keys().next().value
+    if (oldest !== undefined) overpassCache.delete(oldest)
+  }
+  overpassCache.set(query, { data, expires: Date.now() + OVERPASS_CACHE_TTL_MS })
+}
+
 async function queryOverpass(query, signal) {
+  const cached = readOverpassCache(query)
+  if (cached !== undefined) return cached
+
   for (const endpoint of OVERPASS_ENDPOINTS) {
     try {
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
         body: query,
-        signal,
+        signal: overpassSignal(signal),
       })
-      if (res.ok) return await res.json()
+      if (!res.ok) continue
+      const data = await res.json()
+      writeOverpassCache(query, data)
+      return data
     } catch {
-      // try the next mirror
+      // Timed out, blocked or offline — try the next mirror.
     }
   }
   return null
+}
+
+// Public Overpass mirrors take seconds (or fail outright), which is fine for
+// seeding a list once but fatal for an autocomplete the user is typing into.
+// These deadlines let the fast text index answer on its own, with Overpass
+// merged in only when it happens to be quick enough to be worth waiting for.
+const NEARBY_ENRICH_DEADLINE_MS = 1200
+const SEED_ENRICH_DEADLINE_MS = 2500
+
+function withDeadline(promise, ms, fallback) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => {
+      setTimeout(() => resolve(fallback), ms)
+    }),
+  ])
+}
+
+// Proxy calls get their own short budget so a slow or unreachable API can never
+// hold up the field — the caller falls back to its direct providers instead.
+const PROXY_TIMEOUT_MS = 2500
+
+function proxySignal(signal, ms = PROXY_TIMEOUT_MS) {
+  const timeout = AbortSignal.timeout(ms)
+  if (typeof AbortSignal.any === 'function') {
+    return signal ? AbortSignal.any([signal, timeout]) : timeout
+  }
+  return timeout
 }
 
 function overpassElementCoords(el) {
@@ -228,17 +308,12 @@ function overpassElementCoords(el) {
   return null
 }
 
-function formatOverpassLabel(el, fallbackArea) {
-  const tags = el.tags || {}
-  if (tags['addr:housenumber'] && tags['addr:street']) {
-    return [`${tags['addr:housenumber']} ${tags['addr:street']}`, tags['addr:suburb'] || fallbackArea]
-      .filter(Boolean)
-      .join(', ')
-  }
-  if (tags.name) {
-    return [tags.name, fallbackArea].filter(Boolean).join(', ')
-  }
-  return null
+// Map tags arrive as strings that are often blank; normalise once here rather
+// than letting "" flow into labels as ", ,".
+function trimmed(value) {
+  if (value === undefined || value === null) return null
+  const out = String(value).trim()
+  return out || null
 }
 
 function dedupeByLabel(items) {
@@ -255,6 +330,92 @@ function dedupeByLabel(items) {
 }
 
 /**
+ * Asks our own server for streets/addresses near a point.
+ *
+ * Overpass is unreachable from a browser by design — it answers HTTP 429
+ * unless the request carries a meaningful `User-Agent`, which `fetch` forbids
+ * the page from setting — so this proxy is the only compliant path. Returns
+ * null when the API isn't reachable (static hosting, dev without the server),
+ * and the caller falls back to the mirrors.
+ */
+async function fetchNearbyViaProxy({ coords, radiusMeters, query }, signal) {
+  try {
+    const params = new URLSearchParams({
+      lat: String(coords.lat),
+      lng: String(coords.lng),
+      radius: String(Math.round(radiusMeters)),
+    })
+    if (query) params.set('q', query)
+
+    const res = await fetch(`${API_BASE_URL}/addresses/geo/nearby?${params.toString()}`, {
+      signal: proxySignal(signal, 2500),
+    })
+    if (!res.ok) return null
+
+    const data = await res.json()
+    if (!Array.isArray(data?.places)) return null
+
+    return data.places
+      .map((place) => {
+        if (!place?.coords || !place?.street) return null
+        return {
+          houseNumber: place.houseNumber || null,
+          street: place.street,
+          district: place.district || null,
+          name: place.name || null,
+          coords: place.coords,
+        }
+      })
+      .filter(Boolean)
+  } catch {
+    return null
+  }
+}
+
+// Direct mirrors: kept only as a fallback for when the proxy is unavailable.
+async function fetchNearbyViaOverpass({ coords, radiusMeters, query }, signal) {
+  const { lat, lng } = coords
+  const queryText = query
+    ? `[out:json][timeout:12];(
+    way["highway"]["name"~"${query.replace(/[\\"]/g, '')}",i](around:${radiusMeters},${lat},${lng});
+    node["addr:housenumber"]["addr:street"~"${query.replace(/[\\"]/g, '')}",i](around:${radiusMeters},${lat},${lng});
+  );out center 25;`
+    : `[out:json][timeout:12];(
+    way["highway"]["name"](around:${radiusMeters},${lat},${lng});
+    node["addr:housenumber"]["addr:street"](around:${Math.min(radiusMeters, 450)},${lat},${lng});
+  );out center 40;`
+
+  const data = await queryOverpass(queryText, signal)
+  if (!data || !Array.isArray(data.elements)) return []
+
+  return data.elements
+    .map((el) => {
+      const point = overpassElementCoords(el)
+      if (!point) return null
+      const tags = el.tags || {}
+      const street = trimmed(tags['addr:street']) || trimmed(tags.name)
+      if (!street) return null
+      return {
+        houseNumber: trimmed(tags['addr:housenumber']),
+        street,
+        district: trimmed(tags['addr:suburb'] || tags['addr:neighbourhood'] || tags['addr:quarter']),
+        name: trimmed(tags.name),
+        coords: point,
+      }
+    })
+    .filter(Boolean)
+}
+
+function placeLabel(place, lgaName) {
+  if (place.houseNumber && place.street) {
+    return [place.houseNumber + ' ' + place.street, place.district || lgaName]
+      .filter(Boolean)
+      .join(', ')
+  }
+  return [place.name || place.street, place.district || lgaName].filter(Boolean).join(', ')
+}
+
+/**
  * Real nearby streets and house-numbered addresses around a point, sorted
  * closest-first. This is the "go deeper" piece — it returns actual named
  * streets and specific house addresses within `radiusMeters`, not just the
@@ -263,21 +424,16 @@ function dedupeByLabel(items) {
 export async function fetchNearbyPlaces(coords, radiusMeters = 700, signal) {
   if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') return []
 
-  const { lat, lng } = coords
-  const query = `[out:json][timeout:12];(
-    way["highway"]["name"](around:${radiusMeters},${lat},${lng});
-    node["addr:housenumber"]["addr:street"](around:${Math.min(radiusMeters, 450)},${lat},${lng});
-  );out center 40;`
+  const request = { coords, radiusMeters, query: '' }
+  let places = await fetchNearbyViaProxy(request, signal)
+  if (!places) places = await fetchNearbyViaOverpass(request, signal)
+  if (!places.length) return []
 
-  const data = await queryOverpass(query, signal)
-  if (!data || !Array.isArray(data.elements)) return []
-
-  const closest = findClosestLga(coords)
+  const lgaName = findClosestLga(coords).name
   const results = dedupeByLabel(
-    data.elements.map((el) => {
-      const point = overpassElementCoords(el)
-      const label = point ? formatOverpassLabel(el, closest.name) : null
-      return label ? { label, lga: closest.name, coords: point } : null
+    places.map((place) => {
+      const label = placeLabel(place, lgaName)
+      return label ? { label, lga: lgaName, coords: place.coords } : null
     }),
   )
 
@@ -292,24 +448,17 @@ export async function fetchNearbyPlaces(coords, radiusMeters = 700, signal) {
  */
 export async function fetchNearbyPlacesMatching(query, coords, radiusMeters = 3000, signal) {
   if (!coords || !query) return []
-  const { lat, lng } = coords
-  const escaped = query.replace(/[\\"]/g, '')
-  if (!escaped) return []
 
-  const overpassQuery = `[out:json][timeout:12];(
-    way["highway"]["name"~"${escaped}",i](around:${radiusMeters},${lat},${lng});
-    node["addr:housenumber"]["addr:street"~"${escaped}",i](around:${radiusMeters},${lat},${lng});
-  );out center 25;`
+  const request = { coords, radiusMeters, query }
+  let places = await fetchNearbyViaProxy(request, signal)
+  if (!places) places = await fetchNearbyViaOverpass(request, signal)
+  if (!places.length) return []
 
-  const data = await queryOverpass(overpassQuery, signal)
-  if (!data || !Array.isArray(data.elements)) return []
-
-  const closest = findClosestLga(coords)
+  const lgaName = findClosestLga(coords).name
   const results = dedupeByLabel(
-    data.elements.map((el) => {
-      const point = overpassElementCoords(el)
-      const label = point ? formatOverpassLabel(el, closest.name) : null
-      return label ? { label, lga: closest.name, coords: point } : null
+    places.map((place) => {
+      const label = placeLabel(place, lgaName)
+      return label ? { label, lga: lgaName, coords: place.coords } : null
     }),
   )
 
@@ -319,7 +468,10 @@ export async function fetchNearbyPlacesMatching(query, coords, radiusMeters = 30
 
 /**
  * Reverse geocodes coordinates to exact street, neighborhood, and LGA.
- * Uses Photon API -> BigDataCloud -> Nominatim -> Manual LGA nearest fallback.
+ *
+ * Nominatim is reached through our own server because, like Overpass, it
+ * refuses requests without a meaningful `User-Agent` and blocks generic
+ * browser traffic — so the direct call at the bottom is only a fallback.
  * NEVER returns raw coordinate numbers.
  */
 export async function reverseGeocodeDetails(coords, signal) {
@@ -329,7 +481,40 @@ export async function reverseGeocodeDetails(coords, signal) {
 
   const { lat, lng } = coords
 
-  // 1. Try Photon Reverse Geocoding (Accurate street-level, fast, OpenStreetMap data)
+// 1. Our proxy -> Nominatim. The deepest structured address available, and
+  //    the only street-level source reachable from here.
+  try {
+    const params = new URLSearchParams({ lat: String(lat), lng: String(lng) })
+    const res = await fetch(`${API_BASE_URL}/addresses/geo/reverse?${params.toString()}`, {
+      signal: proxySignal(signal),
+    })
+
+    if (res.ok) {
+      const data = await res.json()
+      const d = data?.details
+      if (d && (d.street || d.district || d.lga)) {
+        const lga = d.lga || d.district
+        const parts = [d.houseNumber && d.street ? `${d.houseNumber} ${d.street}` : d.street, d.district, lga, d.state]
+          .filter(Boolean)
+        const uniqueParts = parts.filter((p, i) => parts.indexOf(p) === i)
+
+        if (uniqueParts.length > 0) {
+          return {
+            label: uniqueParts.join(', '),
+            street: d.street || d.district || lga,
+            district: d.district,
+            lga,
+            state: d.state,
+            coords: { lat, lng },
+          }
+        }
+      }
+    }
+  } catch {
+    // Proxy unavailable — fall through to the direct providers.
+  }
+
+  // 2. Try Photon Reverse Geocoding (Accurate street-level, fast, OpenStreetMap data)
   try {
     const url = `https://photon.komoot.io/reverse?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`
     const res = await fetch(url, {
@@ -358,7 +543,7 @@ export async function reverseGeocodeDetails(coords, signal) {
     // Continue to next provider on failure
   }
 
-  // 2. Try BigDataCloud Client Reverse Geocode API (Great locality and LGA coverage)
+  // 3. Try BigDataCloud Client Reverse Geocode API (Great locality and LGA coverage)
   try {
     const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lng)}&localityLanguage=en`
     const res = await fetch(url, { signal })
@@ -386,7 +571,7 @@ export async function reverseGeocodeDetails(coords, signal) {
     // Continue to next provider on failure
   }
 
-  // 3. Try Nominatim Reverse Geocoding (OSM mirror)
+  // 4. Nominatim direct (fallback for when the proxy is unreachable)
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?format=json&zoom=18&addressdetails=1&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`
     const res = await fetch(url, {
@@ -430,7 +615,7 @@ export async function reverseGeocodeDetails(coords, signal) {
     // Continue to manual fallback
   }
 
-  // 4. Safe manual fallback based on closest LGA center (NEVER coord numbers)
+  // 5. Safe manual fallback based on closest LGA center (NEVER coord numbers)
   const closest = findClosestLga(coords)
   return {
     label: `Near ${closest.name}, Lagos`,
@@ -491,10 +676,18 @@ export async function fetchInitialLocationSuggestions(coords, lgaName, signal) {
     combined = dedupeByLabel([...combined, ...items])
   }
 
-  // Current location + close-by streets/addresses, resolved in parallel.
+// Current location + close-by streets/addresses, resolved in parallel — but
+  // only the reverse geocode is allowed to hold this up. The nearby-streets
+  // lookup goes through a deadline too: when the map service is slow or
+  // blocked, the opening list still appears immediately (current location
+  // plus the curated streets) instead of sitting empty.
   const [currentLocation, nearby] = await Promise.all([
     fetchCurrentLocationSuggestion(coords, signal).catch(() => null),
-    fetchNearbyPlaces(coords, 700, signal).catch(() => []),
+    withDeadline(
+      fetchNearbyPlaces(coords, 700, signal).catch(() => []),
+      SEED_ENRICH_DEADLINE_MS,
+      [],
+    ),
   ])
 
   if (currentLocation) addAll([currentLocation])
@@ -503,7 +696,11 @@ export async function fetchInitialLocationSuggestions(coords, lgaName, signal) {
   // Sparse OSM coverage right at this spot — widen the radius before
   // reaching for less-precise, broader-area sources.
   if (combined.length < MIN_INITIAL_SUGGESTIONS) {
-    const wider = await fetchNearbyPlaces(coords, 2500, signal).catch(() => [])
+    const wider = await withDeadline(
+      fetchNearbyPlaces(coords, 2500, signal).catch(() => []),
+      SEED_ENRICH_DEADLINE_MS,
+      [],
+    )
     addAll(wider)
   }
 
@@ -570,57 +767,58 @@ export async function fetchLagosSuggestions(query, options = {}, signal) {
     return fetchInitialLocationSuggestions(userCoords, userLga, signal)
   }
 
-  // 1. When we know the user's location, look for real nearby streets and
-  //    house addresses matching the query first — this is what keeps
-  //    results close to them instead of text-matching anywhere in Lagos.
-  let nearbyMatches = []
-  if (userCoords) {
+  // 1 & 2. Overpass (real streets/house numbers near the user) and Photon (the
+  //      text index) run *together*, not one after the other.
+  //
+//      This ordering is the whole reason the field felt dead: Overpass was
+  //      awaited first, and a public mirror that is slow, blocked or
+  //      rate-limited answers in 5–15s or not at all — so every keystroke sat
+  //      in silence before the fast text index was even asked. Both run
+  //      together now, and the nearby lookup gets a deadline: results appear
+  //      when the text index answers (~1s), not when the map service does.
+  const nearbyPromise = userCoords
+    ? fetchNearbyPlacesMatching(q, userCoords, 3000, signal, userLga).catch(() => [])
+    : Promise.resolve([])
+
+  const photonPromise = (async () => {
     try {
-      nearbyMatches = await fetchNearbyPlacesMatching(q, userCoords, 3000, signal)
-    } catch {
-      nearbyMatches = []
-    }
-  }
+      const latParam = userCoords?.lat ? `&lat=${userCoords.lat}&lon=${userCoords.lng}` : '&lat=6.5244&lon=3.3792'
+      const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}${latParam}&limit=8`
+      const res = await fetch(url, { signal })
 
-  // 2. Try Photon Geocoding API with location bias
-  try {
-    const latParam = userCoords?.lat ? `&lat=${userCoords.lat}&lon=${userCoords.lng}` : '&lat=6.5244&lon=3.3792'
-    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}${latParam}&limit=8`
-    const res = await fetch(url, { signal })
-
-    if (res.ok) {
+      if (!res.ok) return []
       const data = await res.json()
-      if (Array.isArray(data.features) && data.features.length > 0) {
-        const results = data.features
-          .map((f) => {
-            const formatted = formatPhotonAddress(f.properties)
-            if (!formatted || !formatted.label) return null
-            const [lng, lat] = f.geometry.coordinates || []
-            if (typeof lat !== 'number' || typeof lng !== 'number') return null
-            return {
-              label: formatted.label,
-              lga: formatted.lga,
-              coords: { lat, lng },
-            }
-          })
-          .filter(Boolean)
+      if (!Array.isArray(data.features)) return []
 
-        if (results.length > 0 || nearbyMatches.length > 0) {
-          let merged = dedupeByLabel([...nearbyMatches, ...results])
-          if (userCoords) {
-            merged = merged.sort((a, b) => calculateDistanceKm(userCoords, a.coords) - calculateDistanceKm(userCoords, b.coords))
+      return data.features
+        .map((f) => {
+          const formatted = formatPhotonAddress(f.properties)
+          if (!formatted || !formatted.label) return null
+          const [lng, lat] = f.geometry.coordinates || []
+          if (typeof lat !== 'number' || typeof lng !== 'number') return null
+          return {
+            label: formatted.label,
+            lga: trimmed(formatted.lga) || userLga,
+            coords: { lat, lng },
           }
-          return merged.slice(0, 10)
-        }
-      }
+        })
+        .filter(Boolean)
+    } catch {
+      return []
     }
-  } catch {
-    // Continue to next provider on failure
-  }
+  })()
 
-  // Photon failed outright, but we may still have nearby matches from step 1.
-  if (nearbyMatches.length > 0) {
-    return nearbyMatches.slice(0, 10)
+  const [nearbyMatches, photonResults] = await Promise.all([
+    withDeadline(nearbyPromise, NEARBY_ENRICH_DEADLINE_MS, []),
+    photonPromise,
+  ])
+
+  if (photonResults.length > 0 || nearbyMatches.length > 0) {
+    let merged = dedupeByLabel([...nearbyMatches, ...photonResults])
+    if (userCoords) {
+      merged = merged.sort((a, b) => calculateDistanceKm(userCoords, a.coords) - calculateDistanceKm(userCoords, b.coords))
+    }
+    return merged.slice(0, 10)
   }
 
   // 3. Try Nominatim Geocoding API (OSM bounded to Lagos/Nigeria)
