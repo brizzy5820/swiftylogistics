@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { BrandLoader } from '@/components/brand-loader'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, LifeBuoy, MessageCircleMore, PhoneCall, Send } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
@@ -31,7 +32,7 @@ export default function Help() {
     }
   }
 
-  if (!user) return null
+  if (!user) return <BrandLoader />
 
   return (
     <AppShell>

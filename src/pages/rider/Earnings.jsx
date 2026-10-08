@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { BrandLoader } from '@/components/brand-loader'
 import { Wallet, Package, TrendingUp, Gift, Landmark, X, LoaderCircle, CheckCircle2, History } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell'
@@ -21,7 +22,7 @@ export default function Earnings() {
   const deliveries = useStore((s) => s.deliveries)
   const completed = user ? deliveries.filter((d) => d.riderId === user.id && d.status === 'delivered') : []
 
-  if (!user) return null
+  if (!user) return <BrandLoader />
 
   const total = completed.reduce((a, d) => a + d.price, 0)
   const avg = completed.length ? Math.round(total / completed.length) : 0

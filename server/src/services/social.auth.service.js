@@ -1,85 +1,95 @@
 import AppError from "../utils/AppError.js";
 import { generateAccessToken } from "../utils/jwt.js";
 import User from "../models/User.js";
+import { TTLCache } from "../utils/cache.js";
 
-/**
- * Verify a Google id_token by calling Google's tokeninfo endpoint.
- * Returns { sub, email, name, picture } on success.
- */
+// Verified tokens are cached by value so double-submits don't hit Google twice.
+const tokenCache = new TTLCache({ max: 5000, ttl: 60_000 });
+
+/** Verify a Google id_token via Google's tokeninfo endpoint. */
 async function verifyGoogleToken(idToken) {
-  const url = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`;
-  const res = await fetch(url);
-  const payload = await res.json();
+  const cached = tokenCache.get(idToken);
+  if (cached) return cached;
+
+  let res, payload;
+  try {
+    res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    payload = await res.json();
+  } catch {
+    throw new AppError("Could not reach Google to verify your sign-in. Please try again.", 503, "GOOGLE_UNREACHABLE");
+  }
 
   if (!res.ok || payload.error) {
-    throw new AppError("Google token verification failed", 401);
+    throw new AppError("Your Google sign-in expired or is invalid. Please try again.", 401, "GOOGLE_TOKEN_INVALID");
   }
-
-  const clientId = process.env.VITE_GOOGLE_CLIENT_ID;
+  const clientId = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID;
   if (clientId && payload.aud !== clientId) {
-    throw new AppError("Google token audience mismatch", 401);
+    throw new AppError("This Google sign-in was not issued for Swifty.", 401, "GOOGLE_AUDIENCE_MISMATCH");
   }
-
   if (!payload.sub || !payload.email) {
-    throw new AppError("Incomplete Google token payload", 401);
+    throw new AppError("Google did not share your email address. Please allow email access and try again.", 400, "GOOGLE_NO_EMAIL");
+  }
+  if (payload.email_verified !== "true" && payload.email_verified !== true) {
+    throw new AppError("Your Google email address is not verified.", 403, "GOOGLE_EMAIL_UNVERIFIED");
   }
 
-  return {
+  const result = {
     sub: payload.sub,
     email: payload.email.toLowerCase().trim(),
     name: payload.name || payload.given_name || "",
     picture: payload.picture || null,
   };
+  return tokenCache.set(idToken, result);
 }
 
+const toDto = (user) => ({
+  id: user._id, name: user.name, email: user.email, phone: user.phone,
+  role: user.role, avatarUrl: user.avatarUrl, department: user.department,
+});
+
 /**
- * Find an existing user by their social provider ID or email, or create a new one.
- * Returns { accessToken, user }.
+ * intent = "login": only existing accounts may sign in; unknown Google users get a clear error.
+ * intent = "signup": create the account if it does not exist (existing accounts just sign in).
  */
-async function findOrCreateSocialUser({ provider, providerId, email, name, avatarUrl, role }) {
-  const providerKey = provider === "google" ? "googleId" : null;
-  if (!providerKey) throw new AppError("Unsupported provider", 400);
+async function findOrCreateSocialUser({ provider, providerId, email, name, avatarUrl, role, intent = "login" }) {
+  if (provider !== "google") throw new AppError("This sign-in provider is not supported.", 400, "UNSUPPORTED_PROVIDER");
 
-  // 1. Try to find by provider ID
-  let user = await User.findOne({ [providerKey]: providerId });
+  let user = await User.findOne({ $or: [{ googleId: providerId }, { email }] });
 
-  // 2. Fall back to email match — link the social ID to the existing account
+  if (user && !user.googleId) {
+    // Link Google to the existing email account.
+    user.googleId = providerId;
+    if (avatarUrl && !user.avatarUrl) user.avatarUrl = avatarUrl;
+    await user.save();
+  }
+
   if (!user) {
-    user = await User.findOne({ email });
-    if (user) {
-      user[providerKey] = providerId;
-      if (avatarUrl && !user.avatarUrl) user.avatarUrl = avatarUrl;
-      await user.save();
+    if (intent !== "signup") {
+      throw new AppError(
+        "No Swifty account is linked to this Google account. Please sign up first.",
+        404,
+        "ACCOUNT_NOT_FOUND"
+      );
+    }
+    try {
+      user = await User.create({
+        name: name || email.split("@")[0],
+        email,
+        googleId: providerId,
+        avatarUrl,
+        role: ["customer", "rider"].includes(role) ? role : "customer",
+      });
+    } catch (error) {
+      if (error.code === 11000) throw new AppError("An account with this email already exists. Please sign in.", 409, "EMAIL_TAKEN");
+      throw error;
     }
   }
 
-  // 3. Create a brand-new account
-  if (!user) {
-    const normalizedRole = ["customer", "rider"].includes(role) ? role : "customer";
-    user = await User.create({
-      name: name || email.split("@")[0],
-      email,
-      [providerKey]: providerId,
-      avatarUrl: avatarUrl || null,
-      role: normalizedRole,
-      // passwordHash intentionally omitted — social-only account
-    });
-  }
+  if (!user.isActive) throw new AppError("This account has been deactivated. Contact support.", 403, "ACCOUNT_INACTIVE");
 
-  if (!user.isActive) throw new AppError("This account is inactive", 403);
-
-  const accessToken = generateAccessToken(user);
-  return {
-    accessToken,
-    user: {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      role: user.role,
-      avatarUrl: user.avatarUrl,
-    },
-  };
+  return { accessToken: generateAccessToken(user), user: toDto(user), isNew: user.createdAt && Date.now() - user.createdAt.getTime() < 10_000 };
 }
 
 export { verifyGoogleToken, findOrCreateSocialUser };

@@ -1,4 +1,5 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { BrandLoader } from '@/components/brand-loader'
 import { useEffect, useRef, useState } from 'react'
 import { ShimmerImage } from '@/components/shimmer-image'
 import {
@@ -66,7 +67,7 @@ export default function Account() {
     }
   }, [location.state, location.pathname, navigate])
 
-  if (!accountUser) return null
+  if (!accountUser) return <BrandLoader />
 
   async function handleAvatarChange(event) {
     const file = event.target.files?.[0]

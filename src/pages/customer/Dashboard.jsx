@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { BrandLoader } from '@/components/brand-loader'
 import { ArrowRight, Clock, PackageCheck, Search, ClipboardClock } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { AppShell } from '../../components/app-shell'
@@ -9,13 +10,13 @@ import { useStore, useCurrentUser } from '../../lib/api-store'
 import { Skeleton, SkeletonCard } from '../../components/ui/skeleton'
 
 const PLAN_CARDS = [
-  { title: 'Book a ride', subtitle: 'A car is minutes away, day or night', image: '/formimg.jpg' },
-  { title: 'Send a delivery', subtitle: 'Package pickup and drop-off in minutes', image: '/deliveryguy.jpg' },
-  { title: 'Track an order', subtitle: 'Follow it live, every step of the way', image: '/Palz - Delivery.png' },
+  { title: 'Book a ride', subtitle: 'A car is minutes away, day or night', image: '/formimg.jpg' , href:"/customer/ride"},
+  { title: 'Send a delivery', subtitle: 'Package pickup and drop-off in minutes', image: '/deliveryguy.jpg', href:"book" },
+  { title: 'Track an order', subtitle: 'Follow it live, every step of the way', image: '/Palz - Delivery.png',href:"track" },
 ]
 
 export default function CustomerDashboard() {
-  const navigate= useNavigate("")
+  let navigate= useNavigate("")
   const user = useRequireAuth('customer')
   const { user: currentUser, loading } = useCurrentUser()
   const deliveries = useStore((s) => currentUser ? s.deliveries.filter((d) => d.customerId === currentUser.id) : [])
@@ -29,7 +30,7 @@ export default function CustomerDashboard() {
   // has none (empty state), or is still on the way (placeholder); it must
   // never pass through the empty state in between.
   const showHistorySkeleton = !storeHydrated && !storeHydrateFailed
-  if (!currentUser) return null
+  if (!currentUser) return <BrandLoader />
   if (loading) {
     return (
       <AppShell>
@@ -156,10 +157,7 @@ export default function CustomerDashboard() {
           </div>
         </section>
         {/* INput */}
-        <section
-          onClick={() => {
-            navigate = "/ride";
-          }}
+        <Link to="ride"
           className="flex items-center gap-2 rounded-full bg-gray-200 px-4 ring-2 ring-transparent transition focus-within:bg-white focus-within:ring-emerald-600"
         >
           <Search className="h-4 w-4 shrink-0 text-slate-400" />
@@ -175,7 +173,7 @@ export default function CustomerDashboard() {
           >
             <ClipboardClock className="h-4 w-4" />
           </button>
-        </section>
+        </Link>
         {/* Activity. Stays hidden for an account with no history at all (the
             common first-run case) — the placeholder only appears while the
             history fetch is genuinely still running. */}
@@ -239,7 +237,7 @@ export default function CustomerDashboard() {
           <p className="mb-3 font-display text-lg font-bold">Ways to get started</p>
           <div className="scrollbar-hide  flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1">
             {PLAN_CARDS.map((card) => (
-              <div
+              <Link to={card.href}
                 key={card.title}
                 className="relative h-40 w-[78%] shrink-0 snap-start overflow-hidden rounded-2xl"
               >
@@ -249,7 +247,7 @@ export default function CustomerDashboard() {
                   <p className="text-sm font-bold text-white">{card.title}</p>
                   <p className="mt-0.5 text-xs text-white/80">{card.subtitle}</p>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </section>

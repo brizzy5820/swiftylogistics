@@ -7,25 +7,58 @@ export const API_KEY = import.meta.env.VITE_LOVABLE_CONNECTOR_GOOGLE_MAPS_BROWSE
 // Brand route colour (Swifty emerald).
 const ROUTE_COLOR = '#10B981'
 
+// One shared promise for the whole app: the Maps SDK downloads exactly once,
+// every map waits on the same promise (no polling), and a failed load can retry.
+let mapsPromise = null
 export function loadGoogleMaps(key) {
   if (typeof window === 'undefined') return Promise.resolve()
-  if (window.google?.maps) return Promise.resolve()
-  return new Promise((resolve, reject) => {
-    if (document.getElementById('gmaps-script')) {
-      const iv = setInterval(() => {
-        if (window.google?.maps) { clearInterval(iv); resolve() }
-      }, 80)
-      return
-    }
+  if (window.google?.maps?.Map) return Promise.resolve()
+  if (mapsPromise) return mapsPromise
+  mapsPromise = new Promise((resolve, reject) => {
+    const cb = '__swiftyMapsReady'
+    window[cb] = () => { delete window[cb]; resolve() }
     const s = document.createElement('script')
     s.id = 'gmaps-script'
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${key}`
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&loading=async&v=weekly&callback=${cb}`
     s.async = true
-    s.defer = true
-    s.onload = resolve
-    s.onerror = () => reject(new Error('Google Maps failed to load'))
+    s.onerror = () => { mapsPromise = null; s.remove(); reject(new Error('Google Maps failed to load')) }
     document.head.appendChild(s)
   })
+  return mapsPromise
+}
+
+// Start downloading the Maps SDK early (e.g. on hover of "Book" / app idle)
+// so the map is ready by the time the page renders.
+export function preloadGoogleMaps() {
+  if (!API_KEY || typeof window === 'undefined') return
+  const idle = window.requestIdleCallback || ((fn) => setTimeout(fn, 800))
+  idle(() => loadGoogleMaps(API_KEY).catch(() => {}))
+}
+
+// Directions results cached per (pickup, dropoff) pair — rounded to ~10 m —
+// in memory and sessionStorage. Re-opening a trip draws the route instantly
+// and saves a paid Directions API call.
+const ROUTE_CACHE_KEY = 'swifty_route_cache_v1'
+const ROUTE_CACHE_MAX = 40
+const routeMem = new Map()
+const routeKey = (a, b) => [a.lat, a.lng, b.lat, b.lng].map((n) => Number(n).toFixed(4)).join(',')
+function readRouteCache(key) {
+  if (routeMem.has(key)) return routeMem.get(key)
+  try {
+    const all = JSON.parse(sessionStorage.getItem(ROUTE_CACHE_KEY) || '{}')
+    if (all[key]) { routeMem.set(key, all[key]); return all[key] }
+  } catch {}
+  return null
+}
+function writeRouteCache(key, value) {
+  routeMem.set(key, value)
+  try {
+    const all = JSON.parse(sessionStorage.getItem(ROUTE_CACHE_KEY) || '{}')
+    all[key] = value
+    const keys = Object.keys(all)
+    if (keys.length > ROUTE_CACHE_MAX) delete all[keys[0]]
+    sessionStorage.setItem(ROUTE_CACHE_KEY, JSON.stringify(all))
+  } catch {}
 }
 
 // Character codes so the source never contains literal HTML entities that a
@@ -459,11 +492,35 @@ export function DeliveryMap({
       }
 
       try {
-        if (!directionsRef.current) directionsRef.current = new G.DirectionsService()
-        directionsRef.current.route(
-          { origin: pickup, destination: dropoff, travelMode: G.TravelMode.DRIVING },
-          handleRoute,
-        )
+        const key = routeKey(pickup, dropoff)
+        const cached = readRouteCache(key)
+        if (cached) {
+          // Rebuild a Directions-shaped result from the cache: zero network.
+          handleRoute({ routes: [{
+            overview_path: cached.path.map((p) => new G.LatLng(p[0], p[1])),
+            legs: [{ duration: { text: cached.duration }, distance: { text: cached.distance } }],
+            bounds: cached.bounds,
+          }] }, 'OK')
+        } else {
+          if (!directionsRef.current) directionsRef.current = new G.DirectionsService()
+          directionsRef.current.route(
+            { origin: pickup, destination: dropoff, travelMode: G.TravelMode.DRIVING },
+            (result, status) => {
+              const r = status === 'OK' ? result?.routes?.[0] : null
+              if (r?.overview_path?.length) {
+                // Keep every ~3rd vertex: visually identical, ~3x smaller cache.
+                const pts = r.overview_path.filter((_, i, arr) => i % 3 === 0 || i === arr.length - 1)
+                writeRouteCache(key, {
+                  path: pts.map((ll) => [+ll.lat().toFixed(5), +ll.lng().toFixed(5)]),
+                  duration: r.legs?.[0]?.duration?.text || '',
+                  distance: r.legs?.[0]?.distance?.text || '',
+                  bounds: r.bounds?.toJSON?.() || null,
+                })
+              }
+              handleRoute(result, status)
+            },
+          )
+        }
       } catch {
         drawFallbackRoute(requestId)
       }

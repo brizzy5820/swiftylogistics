@@ -177,6 +177,12 @@ isScheduled: {
   }
 );
 
+// Indexes for the hot query paths (customer history, rider jobs, scheduler sweep, public tracking).
+deliverySchema.index({ customer: 1, createdAt: -1 });
+deliverySchema.index({ rider: 1, status: 1, createdAt: -1 });
+deliverySchema.index({ status: 1, scheduledFor: 1 });
+deliverySchema.index({ status: 1, createdAt: -1 });
+
 const Delivery = mongoose.model("Delivery", deliverySchema);
 
 export default Delivery;

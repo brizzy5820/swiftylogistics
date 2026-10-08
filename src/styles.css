@@ -638,3 +638,24 @@
   .swifty-car { transition: none; }
   .swifty-car__ring { animation: none; }
 }
+
+/* ── Brand loader & entrance ─────────────────────────────── */
+.swifty-loader { animation: swifty-fade-in 180ms ease-out; }
+.swifty-loader__pulse { display: inline-flex; animation: swifty-blink 1s ease-in-out infinite; }
+@keyframes swifty-blink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .35; transform: scale(.92); }
+}
+@keyframes swifty-fade-in { from { opacity: 0 } to { opacity: 1 } }
+.swifty-entrance { animation: swifty-fade-in 200ms ease-out; }
+.swifty-entrance__mark { animation: swifty-pop 600ms cubic-bezier(.2,1.4,.4,1) both; }
+.swifty-entrance__name { animation: swifty-rise 500ms 200ms ease-out both; }
+.swifty-entrance__tag { animation: swifty-rise 500ms 350ms ease-out both; }
+.swifty-entrance__tag2 { animation: swifty-rise 700ms 550ms ease-out both; }
+.swifty-entrance__bar i { display: block; height: 100%; width: 40%; background: #fff; border-radius: 999px; animation: swifty-bar 900ms ease-in-out infinite; }
+@keyframes swifty-pop { from { opacity: 0; transform: scale(.4) rotate(-12deg) } to { opacity: 1; transform: none } }
+@keyframes swifty-rise { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: none } }
+@keyframes swifty-bar { from { transform: translateX(-100%) } to { transform: translateX(250%) } }
+@media (prefers-reduced-motion: reduce) {
+  .swifty-loader__pulse, .swifty-entrance__mark, .swifty-entrance__name, .swifty-entrance__tag, .swifty-entrance__bar i { animation: none; }
+}

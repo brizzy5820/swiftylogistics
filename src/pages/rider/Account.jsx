@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { BrandLoader } from '@/components/brand-loader'
 import { useNavigate } from 'react-router-dom'
 import { ShimmerImage } from '@/components/shimmer-image'
 import {
@@ -54,7 +55,7 @@ export default function RiderAccount() {
   const [preferences, setPreferences] = useState({ email: true, sms: true, marketing: false })
   const [savedNotice, setSavedNotice] = useState('')
 
-  if (!accountUser) return null
+  if (!accountUser) return <BrandLoader />
 
   const handleLogout = () => {
     signOut()

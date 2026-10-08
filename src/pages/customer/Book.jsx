@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
+import { BrandLoader } from '@/components/brand-loader'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   MapPin, ArrowLeft, ArrowRight,
@@ -573,7 +574,7 @@ export default function Book() {
   const packageValid = weight >= 1 && weight <= 50
   const advanceBlocked = (step === 1 && !routeValid) || (step === 1 && !packageValid)
 
-  if (!user) return null
+  if (!user) return <BrandLoader />
 
   /* ── Address selection handlers ── */
   function selectAddress(type, item) {

@@ -1,4 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
+import { BrandLoader } from '@/components/brand-loader'
 import { useMemo, useState } from 'react'
 import { Bell, Clock3, PackageCheck, Truck, ArrowLeft } from 'lucide-react'
 import { AppShell} from '@/components/app-shell'
@@ -92,7 +93,7 @@ export default function NotificationsPage() {
     return items.sort((a, b) => new Date(b.time) - new Date(a.time)).slice(0, 12)
   }, [deliveries])
 
-  if (!user) return null
+  if (!user) return <BrandLoader />
 
   const latestNotificationTime = notifications.reduce((latest, item) => Math.max(latest, Number(item.time) || 0), 0)
 

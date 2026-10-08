@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { userCache, invalidateUser } from "../utils/cache.js";
 
 const userSchema = new mongoose.Schema(
   {
@@ -118,6 +119,18 @@ const userSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+userSchema.index({ role: 1, isActive: 1 });
+
+// Keep the auth user cache coherent: any write to a user evicts its cache entry.
+const evict = (id) => { if (id) invalidateUser(id); };
+userSchema.post("save", (doc) => evict(doc._id));
+userSchema.post(["findOneAndUpdate", "findOneAndDelete"], (doc) => evict(doc?._id));
+userSchema.pre(["updateOne", "updateMany", "deleteOne", "deleteMany"], function () {
+  const id = this.getFilter?.()._id;
+  if (id && typeof id !== "object") evict(id); else if (id) evict(String(id));
+  if (!id) userCache.clear();
+});
 
 const User = mongoose.model("User", userSchema);
 

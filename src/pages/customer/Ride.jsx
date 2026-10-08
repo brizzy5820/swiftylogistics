@@ -1,4 +1,5 @@
 // pages/customer/ride.jsx (or wherever Ride.jsx lives)
+import { BrandLoader } from '@/components/brand-loader'
 import { useCallback, useState, useEffect, useRef, useMemo } from 'react'
 import { ArrowLeft, CarFront, Check, Navigation, Users,User, Clock3, X, ArrowRight, Radio, MapPin, LoaderCircle, RefreshCw, Plus, Minus, Wallet, CreditCard, ChevronLeftIcon } from 'lucide-react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
@@ -262,7 +263,7 @@ useEffect(() => {
     return () => t2.current && clearTimeout(t2.current)
   }, [dropoff])
 
-  if (!user) return null
+  if (!user) return <BrandLoader />
 
 async function confirmRide() {
   if (!option) return
@@ -277,7 +278,7 @@ async function confirmRide() {
 
   try {
     
-    const customPrice = customPrices[option.id]
+    const customPrice = getPriceForOption(option.id)
     
     const ride = await createRide({
       pickup: {
@@ -730,7 +731,7 @@ function confirmMatchedRide() {
                   <X className="h-4 w-4" />
                 </button>
               </div>
-              <h2 className="font-display text-xl font-black text-slate-950">{option?.name || 'Your ride'} · ₦{option ? dynamicPrices[option.id] : 0}</h2>
+              <h2 className="font-display text-xl font-black text-slate-950">{option?.name || 'Your ride'} · ₦{option ? getPriceForOption(option.id).toLocaleString() : 0}</h2>
               {errorMessage && (
                 <p className="mt-4 whitespace-pre-line rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">
                   {errorMessage}
@@ -784,7 +785,7 @@ function confirmMatchedRide() {
                   </button>
                 </div>
                 <h2 className="font-display text-xl font-black text-slate-950">How will you pay?</h2>
-                <p className="mt-1 text-sm text-slate-500">{option?.name || 'Your ride'} · ₦{option ? dynamicPrices[option.id] : 0}</p>
+                <p className="mt-1 text-sm text-slate-500">{option?.name || 'Your ride'} · ₦{option ? getPriceForOption(option.id).toLocaleString() : 0}</p>
                 {errorMessage && (
                   <p className="mt-4 whitespace-pre-line rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">
                     {errorMessage}

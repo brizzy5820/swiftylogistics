@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import {
   Mail,
@@ -21,6 +21,7 @@ import {
 import { signIn, signInWithSocial, ensureSession, signUp, updateCurrentUser, VEHICLE_TYPES } from '@/lib/api-store'
 import { getErrorMessage } from '@/services/api'
 import SocialAuthButtons from '@/components/SocialAuthButtons'
+import { BrandEntrance } from '@/components/brand-loader'
 
 // A single labeled input row. The border goes emerald on focus via
 // focus-within, so it works whether the child is an <input> or <select>.
@@ -69,6 +70,15 @@ export default function Auth() {
   const [accountNumber, setAccountNumber] = useState('')
 
   const [socialLoading, setSocialLoading] = useState(false)
+  // After a successful sign-in/up we play the brand entrance, then navigate.
+  const [entrance, setEntrance] = useState(null) // { to, state, name }
+  const tabRef = useRef(tab)
+  useEffect(() => { tabRef.current = tab }, [tab])
+
+  const enter = useCallback((user, to) => {
+    const fallback = user.role === 'admin' ? '/admin' : user.role === 'rider' ? '/rider' : '/customer'
+    setEntrance({ to: to || state?.from || fallback, state: state?.intent ?? null, name: user.name })
+  }, [state])
 
   useEffect(() => {
     let active = true
@@ -88,17 +98,23 @@ export default function Auth() {
       setSocialLoading(true)
       setError('')
       try {
-        const user = await signInWithSocial('google', response.credential, role)
-        const fallback = user.role === 'admin' ? '/admin' : user.role === 'rider' ? '/rider' : '/customer'
-        navigate(state?.from || fallback, { replace: true, state: state?.intent ?? null })
+        if (!response?.credential) throw new Error('Google did not return a sign-in token. Please try again.')
+        // Login tab never creates accounts: unknown Google users get an immediate error.
+        const intent = tabRef.current === 'signup' ? 'signup' : 'login'
+        const user = await signInWithSocial('google', response.credential, role, intent)
+        if (intent === 'signup' && user.role === 'rider') { setSignupStep(2); return }
+        enter(user)
       } catch (err) {
         setError(getErrorMessage(err, 'Google sign-in failed. Please try again.'))
       } finally {
         setSocialLoading(false)
       }
     },
-    [navigate, role, state]
+    [role, enter]
   )
+
+  const googleCbRef = useRef(handleGoogleCredential)
+  useEffect(() => { googleCbRef.current = handleGoogleCredential }, [handleGoogleCredential])
 
   useEffect(() => {
     if (!googleClientId) return
@@ -115,7 +131,8 @@ export default function Auth() {
       if (!window.google?.accounts?.id) return
       window.google.accounts.id.initialize({
         client_id: googleClientId,
-        callback: handleGoogleCredential,
+        callback: (r) => googleCbRef.current(r),
+        itp_support: true,
         auto_select: false,
         cancel_on_tap_outside: true,
       })
@@ -128,7 +145,7 @@ export default function Auth() {
       existing.addEventListener('load', init)
       return () => existing.removeEventListener('load', init)
     }
-  }, [googleClientId, handleGoogleCredential])
+  }, [googleClientId])
 
   function triggerGoogleSignIn() {
     if (!window.google?.accounts?.id) {
@@ -137,11 +154,13 @@ export default function Auth() {
     }
     setSocialLoading(true)
     window.google.accounts.id.prompt((notification) => {
-      if (
-        notification.isNotDisplayed?.() ||
-        notification.isSkippedMoment?.() ||
-        notification.isDismissedMoment?.()
-      ) {
+      if (notification.isNotDisplayed?.() || notification.isSkippedMoment?.()) {
+        setSocialLoading(false)
+        const reason = notification.getNotDisplayedReason?.() || notification.getSkippedReason?.()
+        if (reason && !['user_cancel', 'tap_outside'].includes(reason)) {
+          setError('Google sign-in could not open. Allow third-party sign-in / pop-ups for this site and try again.')
+        }
+      } else if (notification.isDismissedMoment?.() && notification.getDismissedReason?.() !== 'credential_returned') {
         setSocialLoading(false)
       }
     })
@@ -162,8 +181,7 @@ export default function Auth() {
     try {
       const user = await signIn(loginEmail, loginPassword)
       if (!user) throw new Error('Invalid email or password')
-      const fallback = user.role === 'admin' ? '/admin' : user.role === 'rider' ? '/rider' : '/customer'
-      navigate(state?.from || fallback, { replace: true, state: state?.intent ?? null })
+      enter(user)
     } catch (error) {
       setError(getErrorMessage(error, 'Invalid email or password. Please try again.'))
     } finally {
@@ -187,7 +205,7 @@ export default function Auth() {
         setSignupStep(2)
         return
       }
-      navigate(state?.from || '/customer', { replace: true, state: state?.intent ?? null })
+      enter(user, state?.from || '/customer')
     } catch (error) {
       setError(getErrorMessage(error, 'Unable to create your account.'))
     } finally {
@@ -218,19 +236,24 @@ export default function Auth() {
       }
     }
     setIsSavingDetails(false)
-    navigate(state?.from || '/rider', { replace: true, state: state?.intent ?? null })
+    enter({ role: 'rider', name }, state?.from || '/rider')
   }
 
   function handleSkipPayment() {
-    navigate(state?.from || '/rider', { replace: true, state: state?.intent ?? null })
+    enter({ role: 'rider', name }, state?.from || '/rider')
   }
 
   async function handleForgot() {
     setForgotMessage('For account security, password resets are handled by Swifty support. Please contact support to verify your account.')
   }
 
+  const finishEntrance = useCallback(() => {
+    if (entrance) navigate(entrance.to, { replace: true, state: entrance.state })
+  }, [entrance, navigate])
+
   return (
     <div className="min-h-screen w-full bg-white">
+      {entrance && <BrandEntrance name={entrance.name} onDone={finishEntrance} />}
       {/* Image panel — fixed to the left half of the viewport on lg+ */}
       <div className="hidden lg:fixed lg:inset-y-0 lg:right-0 lg:block lg:w-1/2">
         <img src="/formimg.png" alt="" className="h-full w-full object-cover" />

@@ -231,8 +231,8 @@ export async function signIn(email, password) {
   return data.user
 }
 
-export async function signInWithSocial(provider, idToken, role) {
-  const data = await api.socialAuth({ provider, idToken, role })
+export async function signInWithSocial(provider, idToken, role, intent = 'login') {
+  const data = await api.socialAuth({ provider, idToken, role, intent })
   api.setToken(data.accessToken)
   store.session = { userId: data.user.id || data.user._id, role: data.user.role }
   store.users = [data.user]
@@ -396,3 +396,13 @@ export async function adminSetPassword(id, password) { await api.setAdminUserPas
 export async function replyToTicket(id, content) { const data = await api.replySupportTicket(id, content); await refreshOrders(); return data.ticket }
 export async function updateTicketStatus(id, status) { const data = await api.updateSupportTicket(id, status); await refreshOrders(); return data.ticket }
 export async function createSupportTicket(payload) { const data = await api.createSupportTicket(payload); await refreshOrders(); return data.ticket }
+
+
+// Any request that finds the session dead signs the user out once, app-wide.
+if (typeof window !== 'undefined') {
+  window.addEventListener('swifty:session-expired', (e) => {
+    if (!store.session) return
+    signOut()
+    toast.error(e.detail?.message || 'Session expired. Please sign in again.', { id: 'session-expired' })
+  })
+}

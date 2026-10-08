@@ -1,4 +1,5 @@
 import { Link, useNavigate,  useParams } from 'react-router-dom'
+import { BrandLoader } from '@/components/brand-loader'
 import { useState, useEffect } from 'react'
 import {
   ArrowLeft,
@@ -45,7 +46,6 @@ export default function History() {
   const [activeDelivery, setActiveDelivery] = useState(null)
   const [open, setOpen] = useState(false)
   const { id } = useParams()
-  if (!currentUser) return null
   const [detailLoading, setDetailLoading] = useState(true)
   const pending = deliveries.filter((d) => d.status === 'pending')
   const active = deliveries.filter((d) => d.status !== 'delivered' && d.status !== 'cancelled')
@@ -57,7 +57,7 @@ export default function History() {
     const timer = setTimeout(() => setDetailLoading(false), 300)
     return () => clearTimeout(timer)
   }, [id])
-  if (!user) return null
+  if (!user) return <BrandLoader />
   function handleBack() {
     if (window.history.state && window.history.state.idx > 0) {
       navigate(-1)

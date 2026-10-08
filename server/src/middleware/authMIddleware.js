@@ -1,63 +1,35 @@
 import { verifyAccessToken } from "../utils/jwt.js";
 import User from "../models/User.js";
+import { userCache } from "../utils/cache.js";
+
+const fail = (res, status, code, message) => res.status(status).json({ success: false, code, message });
 
 const protect = async (req, res, next) => {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : null;
+  if (!token) return fail(res, 401, "AUTH_REQUIRED", "Please sign in to continue.");
+
+  let decoded;
   try {
-    const authHeader = req.headers.authorization;
+    decoded = verifyAccessToken(token);
+  } catch (error) {
+    if (error.name === "TokenExpiredError") return fail(res, 401, "SESSION_EXPIRED", "Session expired. Please sign in again.");
+    return fail(res, 401, "INVALID_SESSION", "Invalid session. Please sign in again.");
+  }
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({
-        success: false,
-        message: "Authentication required",
-      });
-    }
-
-    const token = authHeader.split(" ")[1];
-
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: "Authentication required",
-      });
-    }
-
-    const decoded = verifyAccessToken(token);
-
-    const user = await User.findById(decoded.sub)
-      .select("-passwordHash");
-
+  try {
+    const id = String(decoded.sub);
+    let user = userCache.get(id);
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: "User no longer exists",
-      });
+      // Hydrated doc (not lean) because controllers call user.save() etc.
+      user = await User.findById(id).select("-passwordHash");
+      if (user) userCache.set(id, user);
     }
-
-    if (!user.isActive) {
-      return res.status(403).json({
-        success: false,
-        message: "This account is inactive",
-      });
-    }
-
+    if (!user) return fail(res, 401, "ACCOUNT_NOT_FOUND", "This account no longer exists.");
+    if (!user.isActive) return fail(res, 403, "ACCOUNT_INACTIVE", "This account has been deactivated. Contact support.");
     req.user = user;
-
     next();
   } catch (error) {
-    if (error.name === "TokenExpiredError") {
-      return res.status(401).json({
-        success: false,
-        message: "Access token has expired",
-      });
-    }
-
-    if (error.name === "JsonWebTokenError") {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid access token",
-      });
-    }
-
     next(error);
   }
 };

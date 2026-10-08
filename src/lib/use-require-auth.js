@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ensureSession, useStore } from './api-store'
+import { ensureSession, useStore, getCurrentUser } from './api-store'
 
 export function useRequireAuth(requiredRole) {
   const navigate = useNavigate()
   const location = useLocation()
-  const [user, setUser] = useState(null)
-  const [checking, setChecking] = useState(true)
+  // Fast path: a cached session with the right role renders the page on the
+  // very first frame; the server check still runs in the background.
+  const hasToken = typeof window !== 'undefined' && !!(localStorage.getItem('swifty_access_token') || sessionStorage.getItem('swifty_access_token'))
+  const cached = hasToken ? getCurrentUser() : null
+  const cachedOk = !!cached && (!requiredRole || cached.role === requiredRole)
+  const [user, setUser] = useState(cachedOk ? cached : null)
+  const [checking, setChecking] = useState(!cachedOk)
   const session = useStore((s) => s.session)
   const loading = useStore((s) => s.loading)
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { BrandLoader } from '@/components/brand-loader'
 import { Link, useNavigate } from 'react-router-dom'
 import { Briefcase, Star, Trophy, AlertCircle, ChevronRight, GripHorizontal, X, LoaderCircle } from 'lucide-react'
 import { toast } from 'sonner'
@@ -358,7 +359,7 @@ export default function RiderDashboard() {
     document.documentElement.style.userSelect = ''
   }, [])
 
-  if (!user) return null
+  if (!user) return <BrandLoader />
 
   return (
     <AppShell>

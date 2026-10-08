@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { MessageCircle, Send, X } from 'lucide-react'
+import { MessageCircle,MessageSquareText , Send, X } from 'lucide-react'
 import { getSocket, sendChatMessage } from '@/lib/socket'
 import { getMessages, getErrorMessage } from '@/services/api'
 import { setActiveChatOrder } from '@/lib/chat-notify'
@@ -143,7 +143,7 @@ export function ChatPanel({ orderId, currentUserId, otherPartyLabel, open, onOpe
       <div className="flex h-[70vh] w-full max-w-sm flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl lg:h-[28rem]">
         <div className="flex shrink-0 items-center justify-between border-b border-slate-100 bg-emerald-600 px-4 py-3 text-white">
           <div className="flex items-center gap-2">
-            <MessageCircle className="h-4 w-4" />
+            <MessageSquareText   className="h-4 w-4" />
             <p className="text-sm font-bold">{otherPartyLabel || 'Chat'}</p>
           </div>
           <button type="button" onClick={() => onOpenChange(false)} aria-label="Close chat" className="rounded-full p-1 hover:bg-white/10">
@@ -170,14 +170,17 @@ export function ChatPanel({ orderId, currentUserId, otherPartyLabel, open, onOpe
 /** Small floating launcher — a chat bubble with an unread dot. */
 export function ChatLauncher({ onClick, hasUnread }) {
   return (
-    <button
+  <div>
+      <button
       type="button"
       onClick={onClick}
       aria-label="Open chat"
       className="relative flex items-center justify-center size-10 rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
     >
-      <MessageCircle className="h-4 w-4" />
+      <MessageSquareText className="h-4 w-4" />
       {hasUnread && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-red-500 ring-2 ring-white" />}
     </button>
+    {/* <p className='text-xs  ml-2 '>Chat</p> */}
+  </div>
   )
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { BrandLoader } from '@/components/brand-loader'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ArrowLeft, Briefcase, CheckCircle2, Clock3, Hourglass, LoaderCircle, MapPin, PackageCheck, User, X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -146,7 +147,7 @@ function RiderJobView() {
     return () => clearTimeout(timer)
   }, [id])
 
-  if (!user) return null
+  if (!user) return <BrandLoader />
 
   // Show skeleton while loading detail
   if (id && (detailLoading || (loadingJob && !delivery))) {
