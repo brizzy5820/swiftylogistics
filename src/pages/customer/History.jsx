@@ -14,7 +14,7 @@ import { AppShell } from '@/components/app-shell'
 import { BottomSheet } from '@/components/bottom-sheet'
 import { TripCard } from '@/components/trip-card'
 import { useRequireAuth } from '@/lib/use-require-auth'
-import { STATUS_LABEL, useStore, useCurrentUser } from '@/lib/api-store'
+import { STATUS_LABEL, useStore } from '@/lib/api-store'
 
 const STATUS_STYLES = {
   pending: { badge: 'bg-orange-100 text-orange-700', dot: 'bg-orange-500', rail: 'bg-orange-500' },
@@ -40,9 +40,10 @@ function formatDateTime(value) {
 
 export default function History() {
   const user = useRequireAuth('customer')
-  const { user: currentUser } = useCurrentUser()
   const navigate = useNavigate()
-  const deliveries = useStore((s) => (currentUser ? s.deliveries.filter((d) => d.customerId === currentUser.id) : []))
+  // A guest's own orders are keyed by the same id the store stamps on them
+  // (see getGuestUser), so this one filter covers signed-in and guest alike.
+  const deliveries = useStore((s) => (user ? s.deliveries.filter((d) => d.customerId === user.id) : []))
   const [activeDelivery, setActiveDelivery] = useState(null)
   const [open, setOpen] = useState(false)
   const { id } = useParams()

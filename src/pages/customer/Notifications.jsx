@@ -28,13 +28,18 @@ function dayGroup(value) {
 
 export default function NotificationsPage() {
   const navigate= useNavigate()
+  // `useRequireAuth` resolves the guest identity too; `useCurrentUser` is null
+  // whenever there is no session, so the guest user is the fallback.
   const user = useRequireAuth('customer')
-  const { user: currentUser } = useCurrentUser()
+  const { user: sessionUser } = useCurrentUser()
+  const viewedUser = sessionUser ?? user
   const [readAt, setReadAt] = useState(() => {
     if (typeof window === 'undefined') return 0
     return Number(window.localStorage.getItem(NOTIFICATION_READ_KEY)) || 0
   })
-  const deliveries = useStore((s) => (currentUser ? s.deliveries.filter((d) => d.customerId === currentUser.id) : []))
+  // A guest's orders carry the device-scoped guest id as their customerId, so
+  // this same filter covers signed-in customers and guests alike.
+  const deliveries = useStore((s) => (viewedUser ? s.deliveries.filter((d) => d.customerId === viewedUser.id) : []))
 
   const notifications = useMemo(() => {
     if (!deliveries.length) return []

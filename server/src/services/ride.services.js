@@ -45,7 +45,7 @@ const resolvePrice = (distanceKm, rideType, customPrice) => {
   return calculateFare(distanceKm, rideType);
 };
 
-const createRide = async (userId, data) => {
+const createRide = async (userId, data, guestContact = null) => {
   let pickup;
   let dropoff;
 
@@ -80,7 +80,7 @@ const createRide = async (userId, data) => {
   const initialStatus = scheduledFor ? "scheduled" : "pending";
   const trackingId = `RIDE-${crypto.randomBytes(5).toString("hex").toUpperCase()}`;
 
-  const ride = await Delivery.create({
+  const rideData = {
     customer: userId,
     type: "ride",
     pickup,
@@ -96,7 +96,15 @@ const createRide = async (userId, data) => {
     trackingId,
     courierPosition: scheduledFor ? null : pickup.coords,
     statusTimestamps: { [initialStatus]: new Date() },
-  });
+  };
+
+  // Guest contact info for anonymous riders
+  if (guestContact) {
+    rideData.guestEmail = guestContact.email?.toLowerCase()?.trim() || null
+    rideData.guestPhone = guestContact.phone?.trim() || null
+  }
+
+  const ride = await Delivery.create(rideData);
 
   // Let every online rider know a job just opened up (no toast — just a
   // list refresh on their side).

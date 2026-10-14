@@ -1,9 +1,25 @@
 import deliveryService from "../services/delivery.service.js";
 
 const createDelivery = async (req, res) => {
+  const { guestEmail, guestPhone, ...data } = req.body;
+  // Authenticated customers book against their own account; anonymous ones
+  // book as a guest and need a way for the rider to reach them.
+  const userId = req.user?._id || null;
+  const guestContact = (!req.user && (guestEmail || guestPhone))
+    ? { email: guestEmail, phone: guestPhone }
+    : null;
+
+  if (!userId && !guestContact) {
+    return res.status(400).json({
+      success: false,
+      code: "GUEST_CONTACT_REQUIRED",
+      message: "Provide an email or phone number so your rider can reach you.",
+    });
+  }
+
   const delivery = await deliveryService.createDelivery(
-    req.user._id,
-    req.body
+    userId,
+    { ...data, guestEmail: guestContact?.email, guestPhone: guestContact?.phone }
   );
 
   return res.status(201).json({

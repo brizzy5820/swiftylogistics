@@ -1,14 +1,25 @@
 import { z } from "zod";
 
+const inlineLocation = z.object({
+  address: z.string().min(1, "Address is required"),
+  coords: z.object({
+    lat: z.number().min(-90).max(90),
+    lng: z.number().min(-180).max(180),
+  }),
+});
+
 const createDeliverySchema = z
   .object({
-    pickupAddress: z
-      .string()
-      .min(1, "Pickup address is required"),
+    pickupAddress: z.string().min(1).optional(),
+    dropoffAddress: z.string().min(1).optional(),
 
-    dropoffAddress: z
-      .string()
-      .min(1, "Drop-off address is required"),
+    // Guest checkout: inline locations instead of saved-address ids.
+    pickup: inlineLocation.optional(),
+    dropoff: inlineLocation.optional(),
+
+    // Guest checkout: at least one is required for anonymous bookings.
+    guestEmail: z.string().email().optional(),
+    guestPhone: z.string().min(1).optional(),
 
     packageType: z
       .enum(["Express", "Cargo", "Electric"])
@@ -31,7 +42,15 @@ const createDeliverySchema = z
       .datetime()
       .optional(),
   })
-  .strict();
+  .strict()
+  .refine((data) => Boolean(data.pickupAddress || data.pickup), {
+    message: "Pickup is required",
+    path: ["pickupAddress"],
+  })
+  .refine((data) => Boolean(data.dropoffAddress || data.dropoff), {
+    message: "Drop-off is required",
+    path: ["dropoffAddress"],
+  });
 
 export {
   createDeliverySchema,

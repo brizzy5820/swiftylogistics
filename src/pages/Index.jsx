@@ -15,11 +15,11 @@ import {
   User,
   X,
 } from "lucide-react";
-import { useCurrentUser } from "../lib/api-store";
+import { useCurrentUser, getGuestSession, setGuestSession } from "../lib/api-store";
 import { ShimmerImage } from "../components/shimmer-image";
 import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "../components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader,SheetTrigger, SheetTitle } from "../components/ui/sheet";
 import { ServiceGrid } from "../components/marketing/ServiceGrid";
 import { Footer } from "../components/marketing/Footer";
 import { LocationField } from "../components/location-field";
@@ -46,9 +46,50 @@ function ProfileBar({ user, className = "" }) {
   );
 }
 
+// function DemoLoginButtons() {
+//   const navigate = useNavigate()
+  
+//   return (
+//     <div className="mt-6 flex flex-wrap items-center gap-3">
+//       <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Try demo:</span>
+//       <button
+//         type="button"
+//         onClick={async () => {
+//           try {
+//             const user = await demoLogin('customer')
+//             navigate('/customer')
+//           } catch (err) {
+//             console.error('Demo login failed:', err)
+//           }
+//         }}
+//         className="inline-flex items-center gap-1.5 rounded-full border-2 border-dashed border-emerald-300 bg-emerald-50/50 px-4 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100"
+//       >
+//         <User className="h-3.5 w-3.5" /> Demo Customer
+//       </button>
+//       <button
+//         type="button"
+//         onClick={async () => {
+//           try {
+//             const user = await demoLogin('rider')
+//             navigate('/rider')
+//           } catch (err) {
+//             console.error('Demo login failed:', err)
+//           }
+//         }}
+//         className="inline-flex items-center gap-1.5 rounded-full border-2 border-dashed border-emerald-300 bg-emerald-50/50 px-4 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100"
+//       >
+//         <CarFront className="h-3.5 w-3.5" /> Demo Rider
+//       </button>
+//     </div>
+//   )
+// }
+
 export default function Index() {
   const navigate = useNavigate();
   const { user } = useCurrentUser();
+  // A guest has no session but is already browsing as one once they tap
+  // "Proceed as guest" on the auth form.
+  const [isGuest, setIsGuest] = useState(() => Boolean(getGuestSession()));
   const { scrollY } = useScroll();
   const heroY = useTransform(scrollY, [0, 700], ["0%", "22%"]);
   const [scrolled, setScrolled] = useState(false);
@@ -62,14 +103,29 @@ export default function Index() {
   const [userLocation, setUserLocation] = useState(null);
   const [trackCode, setTrackCode] = useState("");
 
+  function proceedAsGuest() {
+    if (!getGuestSession()) setGuestSession(null, null)
+    setIsGuest(true)
+    navigate("/customer")
+  }
+
   function handleRide(e) {
     e.preventDefault();
-    if (!user) {
-      navigate("/auth", { state: { from: "/customer/ride", intent: { pickup, dropoff, pickupCoords, dropoffCoords, role: "customer" } } });
-      return;
-    }
+    // Resolve the picked addresses to coordinates synchronously, so the ride
+    // page receives real pickup/dropoff pins even when the field's own async
+    // geocode has not landed yet (or the device is offline).
     const pc = pickupCoords ?? resolveAddressCoords(pickup, null);
     const dc = dropoffCoords ?? resolveAddressCoords(dropoff, null);
+    if (!user) {
+      // Already a guest on this device — straight to the ride flow, where the
+      // contact form appears after a ride is picked.
+      if (isGuest) {
+        navigate({ pathname: '/customer/ride', state: { pickup, dropoff, pickupCoords: pc, dropoffCoords: dc } });
+        return;
+      }
+      navigate("/auth", { state: { from: "/customer/ride", intent: { pickup, dropoff, pickupCoords: pc, dropoffCoords: dc, role: "customer" } } });
+      return;
+    }
     navigate({ pathname: '/customer/ride', state: { pickup, dropoff, pickupCoords: pc, dropoffCoords: dc } });
   }
 
@@ -122,12 +178,13 @@ export default function Index() {
                 >
                   <CarFront className="h-4 w-4" /> Ride
                 </Link>
-                <Link
-                  to="/auth"
+                <button
+                  type="button"
+                  onClick={proceedAsGuest}
                   className="inline-flex items-center gap-1.5 rounded-full border border-slate-900/15 bg-white/70 px-4 py-2 text-sm font-bold text-slate-800 transition hover:bg-white"
                 >
-                  Drive
-                </Link>
+                  Guest
+                </button>
                 <Link
                   to="/auth"
                   className={`rounded-full px-4 py-2 text-sm font-bold ${scrolled ? "text-slate-700 hover:bg-slate-100" : "text-slate-700 hover:bg-white/60"}`}
@@ -169,6 +226,13 @@ export default function Index() {
                   </>
                 ) : (
                   <>
+                    <button
+                      type="button"
+                      onClick={proceedAsGuest}
+                      className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 p-3 text-center font-bold text-slate-800"
+                    >
+                      Proceed as guest
+                    </button>
                     <Link
                       to="/auth"
                       className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 p-3 text-center font-bold text-white"

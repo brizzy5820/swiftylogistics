@@ -1,5 +1,5 @@
 // pages/customer/ride.jsx (or wherever Ride.jsx lives)
-import { BrandLoader } from '@/components/brand-loader'
+import { BrandLoader, BrandEntrance } from '@/components/brand-loader'
 import { useCallback, useState, useEffect, useRef, useMemo } from 'react'
 import { ArrowLeft, CarFront, Check, Navigation, Users,User, Clock3, X, ArrowRight, Radio, MapPin, LoaderCircle, RefreshCw, Plus, Minus, Wallet, CreditCard, ChevronLeftIcon } from 'lucide-react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
@@ -38,7 +38,13 @@ export default function Ride() {
   const user = useRequireAuth('customer')
   const navigate = useNavigate()
   const location = useLocation()
-  const intent = location.state || {}
+  // Two shapes reach this page: a direct payload `{ pickup, dropoff, coords }`
+  // (from the landing page or the guest bar) and one nested under `intent`
+  // (from the auth redirect). Normalise here so the fields below are seeded
+  // identically either way — otherwise a guest who booked via /auth lands with
+  // empty inputs even though they typed them on the landing page.
+  const navState = location.state || {}
+  const intent = (navState.intent && typeof navState.intent === 'object') ? navState.intent : navState
 const [bidOpen, setBidOpen] = useState({})
   const [option, setOption] = useState(null)
   const [pickup, setPickup] = useState(intent.pickup || '')
@@ -58,6 +64,22 @@ const [bidOpen, setBidOpen] = useState({})
   const [paymentMethod, setPaymentMethod] = useState(null) // 'cash' | 'transfer'
   const [customPrices, setCustomPrices] = useState({}) // { optionId: price }
   const [searchCountdown, setSearchCountdown] = useState(SEARCH_COUNTDOWN_MS / 1000)
+  const [showGuestModal, setShowGuestModal] = useState(false)
+  const [guestEmail, setGuestEmail] = useState('')
+  const [guestPhone, setGuestPhone] = useState('')
+  const [guestModalError, setGuestModalError] = useState('')
+
+  // Addresses picked on the landing page travel in route state. The useState
+  // initializers above only run when this component mounts, so a navigation
+  // into an already-mounted Ride page (back/forward, or a second pick) would
+  // otherwise leave the inputs stale. Mirror the incoming state on every
+  // navigation so the fields show what was just submitted.
+  useEffect(() => {
+    if (intent.pickup) setPickup(intent.pickup)
+    if (intent.dropoff) setDropoff(intent.dropoff)
+    if (intent.pickupCoords) setPickupCoords(intent.pickupCoords)
+    if (intent.dropoffCoords) setDropoffCoords(intent.dropoffCoords)
+  }, [intent.pickup, intent.dropoff, intent.pickupCoords, intent.dropoffCoords])
   // The ride we are hunting a rider for. Kept in a ref so "Try again" can
   // restart the search even when no rider ever matched (matchedRider is null
   // in exactly the timed-out case, which is the only case retry is shown in).
@@ -79,7 +101,7 @@ const handleBidToggle = (id) => {
   // races the new sheet's first report and the map ends up at the wrong height
   // — the route then renders underneath the drawer instead of above it.
   const sheetOwner =
-    searchingRideId || matchedRider ? 'search' : paymentStep ? 'payment' : ridePick ? 'pick' : null
+    searchingRideId || matchedRider ? 'search' : showGuestModal ? 'guest' : paymentStep ? 'payment' : ridePick ? 'pick' : null
 
   // How much of the screen a mobile bottom sheet is currently occupying
   // (real measured px, reported by MobileDrawer / RiderSearchDrawer). The
@@ -96,6 +118,7 @@ const handleBidToggle = (id) => {
     pick: (px, dragging) => applySheetHeight('pick', px, dragging),
     payment: (px, dragging) => applySheetHeight('payment', px, dragging),
     search: (px, dragging) => applySheetHeight('search', px, dragging),
+    guest: (px, dragging) => applySheetHeight('guest', px, dragging),
   }), [applySheetHeight])
 
   // No sheet open at all — drop the offset so the map fills the screen again.
@@ -263,13 +286,63 @@ useEffect(() => {
     return () => t2.current && clearTimeout(t2.current)
   }, [dropoff])
 
+  // Guest checkout. A guest has no contact on file, so they are asked for one
+  // on every ride — the guest session is device-scoped and never stores the
+  // contact, which is exactly what tells a guest apart from a signed-in user.
+  const isGuest = Boolean(user?.isGuest)
+
+  // First arrival from the landing page's booking form: play the branded
+  // welcome before the ride page takes over. The pickup/dropoff they typed
+  // there are already in `intent`, so the page is fully populated underneath.
+  const [showWelcome] = useState(() => {
+    if (!(intent.pickup || intent.dropoff)) return false
+    try { return !localStorage.getItem('swifty_ride_welcome_seen') } catch { return false }
+  })
+  const [welcomeDone, setWelcomeDone] = useState(false)
+  useEffect(() => {
+    if (showWelcome) {
+      try { localStorage.setItem('swifty_ride_welcome_seen', '1') } catch {}
+    }
+  }, [showWelcome])
+  const showEntrance = showWelcome && !welcomeDone
+
   if (!user) return <BrandLoader />
+
+function confirmGuestContact() {
+    const nextEmail = guestEmail.trim()
+    const nextPhone = guestPhone.trim()
+
+    if (!nextEmail && !nextPhone) {
+      setGuestModalError('Add an email/phone number so your rider can reach you.')
+      return
+    }
+    if (nextEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+      setGuestModalError('That email address does not look right.')
+      return
+    }
+
+    setGuestModalError('')
+    setShowGuestModal(false)
+    setPaymentStep(true)
+  }
 
 async function confirmRide() {
   if (!option) return
   if (!paymentMethod) {
     setErrorMessage('Please select a payment method')
     return
+  }
+
+  // Guest checkout: require contact info for driver communication
+  if (isGuest) {
+    if (!guestEmail.trim() && !guestPhone.trim()) {
+      setGuestModalError('Please provide an email or phone so the rider can contact you')
+      return
+    }
+    if (guestEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim())) {
+      setGuestModalError('Please enter a valid email address')
+      return
+    }
   }
 
   setLoading(true)
@@ -299,6 +372,8 @@ async function confirmRide() {
       rideType: option.id,
       paymentMethod,
       customPrice,
+      guestEmail: isGuest ? guestEmail.trim() || user?.email || undefined : undefined,
+      guestPhone: isGuest ? guestPhone.trim() || user?.phone || undefined : undefined,
     })
 
     setActiveRide(ride)
@@ -509,6 +584,14 @@ function confirmMatchedRide() {
 
   return (
     <AppShell hideMobileHeader>
+      {/* Branded welcome for a first arrival here from the landing page. */}
+      {showEntrance && (
+        <BrandEntrance
+          name={isGuest ? 'Guest' : user?.name}
+          duration={1800}
+          onDone={() => setWelcomeDone(true)}
+        />
+      )}
       <main className="mx-auto flex flex-col gap-6 px-4 py-4 lg:mt-4 md:mt-4 sm:px-6 lg:grid lg:grid-cols-2 ">
         {/* Left: route form */}
         <section className="overflow-visible rounded-3xl  sm:p-8">
@@ -628,7 +711,11 @@ function confirmMatchedRide() {
         setRidePick(false)
         setShowModal(false)
         setErrorMessage('')
-        setPaymentStep(true)
+        if (isGuest) {
+          setShowGuestModal(true)
+        } else {
+          setPaymentStep(true)
+        }
       }}
       disabled={loading || !option}
       className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-400 disabled:opacity-60"
@@ -694,7 +781,7 @@ function confirmMatchedRide() {
                 )}
                 {rideOptions}
                 <button
-                  onClick={() => { setRidePick(false); setShowModal(false); setErrorMessage(''); setPaymentStep(true) }}
+                  onClick={() => { setRidePick(false); setShowModal(false); setErrorMessage(''); if (isGuest) { setShowGuestModal(true) } else { setPaymentStep(true) } }}
                   disabled={loading || !option}
                   className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-400 disabled:opacity-60"
                 >
@@ -842,6 +929,148 @@ function confirmMatchedRide() {
           timedOut={timedOut}
           countdown={searchCountdown}
         />
+      )}
+
+      {/* ── Guest contact — asked on every ride, right before payment/rider
+          search, so the rider has a way to reach an anonymous customer. On
+          mobile it is a draggable bottom sheet (matching rider search and the
+          payment step); on desktop it is a centred modal. ── */}
+      {showGuestModal && (
+        <>
+          <MobileDrawer
+            fitContent
+            onHeightChange={sheetHandlers.guest}
+            onClose={() => { setShowGuestModal(false); setGuestModalError('') }}
+            footer={(
+              <button
+                type="button"
+                onClick={confirmGuestContact}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-400"
+              >
+                Continue <ArrowRight className="h-4 w-4" />
+              </button>
+            )}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+          <div className="flex gap-2 items-center">      <h2 className="font-display text-xl font-black text-slate-950">Contact the rider </h2><p>(guest)</p></div>
+                <p className="mt-1 break-words text-sm text-slate-500">
+                  You're booking as a guest. Add an email or phone so your rider can reach you. <Link to="/auth" className="text-xs font-bold text-emerald-600 hover:text-emerald-700">sign up</Link> to avoid form
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setShowGuestModal(false); setGuestModalError('') }}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {guestModalError && (
+              <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">
+                {guestModalError}
+              </p>
+            )}
+
+            <div className="mt-3 space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-600">Email</label>
+                <input
+                  type="email"
+                  value={guestEmail}
+                  onChange={(e) => { setGuestEmail(e.target.value); setGuestModalError('') }}
+                  placeholder="you@example.com"
+                  className="w-full rounded-xl border border-slate-50 bg-slate-100 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-600">Phone</label>
+                <input
+                  type="tel"
+                  value={guestPhone}
+                  onChange={(e) => { setGuestPhone(e.target.value); setGuestModalError('') }}
+                  placeholder="08012345678"
+                  className="w-full rounded-xl border border-slate-50 bg-slate-100 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2">
+              <span className="text-xs text-slate-500"> want to avoid form or Already have an account? </span>
+              <Link to="/auth" className="text-xs font-bold text-emerald-600 hover:text-emerald-700">
+                Sign in
+              </Link>
+            </div>
+          </MobileDrawer>
+
+          {/* Desktop counterpart of the same sheet. */}
+          <div className="fixed inset-0 z-50 hidden items-end justify-center bg-slate-900/50 p-4 sm:items-center lg:flex">
+            <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h2 className="font-display text-xl font-black text-slate-950">Contact the rider</h2>
+   <p className="mt-1 break-words text-sm text-slate-500">
+                  You're booking as a guest. Add an email or phone so your rider can reach you. <Link to="/auth" className="text-xs font-bold text-emerald-600 hover:text-emerald-700">sign up</Link> to avoid form
+                </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setShowGuestModal(false); setGuestModalError('') }}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {guestModalError && (
+                <p className="mb-4 whitespace-pre-line rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">
+                  {guestModalError}
+                </p>
+              )}
+
+              <div className="space-y-3">
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-600">Email</label>
+                  <input
+                    type="email"
+                    value={guestEmail}
+                    onChange={(e) => { setGuestEmail(e.target.value); setGuestModalError('') }}
+                    placeholder="you@example.com"
+                    className="w-full rounded-xl border border-slate-50 bg-slate-100 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-600">Phone</label>
+                  <input
+                    type="tel"
+                    value={guestPhone}
+                    onChange={(e) => { setGuestPhone(e.target.value); setGuestModalError('') }}
+                    placeholder="08012345678"
+                    className="w-full rounded-xl border border-slate-50 bg-slate-100 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2">
+                <span className="text-xs text-slate-500">Already have an account?</span>
+                <Link to="/auth" className="text-xs font-bold text-emerald-600 hover:text-emerald-700">
+                  Sign in
+                </Link>
+              </div>
+
+              <button
+                type="button"
+                onClick={confirmGuestContact}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-400"
+              >
+                Continue <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </AppShell>
   )

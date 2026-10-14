@@ -2,20 +2,25 @@ import express from "express";
 
 import deliveryController from "../controllers/delivery.controller.js";
 import validate from "../middleware/validate.js";
-import { protect } from "../middleware/authMIddleware.js";
+import { protect, protectOptional } from "../middleware/authMIddleware.js";
 import asyncHandler from "../utils/asyncHandler.js";
 
 import { createDeliverySchema } from "../validators/dellivery.validator.js";
 
 const router = express.Router();
 
-router.use(protect);
-
+// Guest checkout: an anonymous customer can send a package without signing in.
+// They send inline pickup/dropoff plus a contact, since they have no saved
+// addresses. Declared before the blanket `protect` so an anonymous request is
+// not rejected before it reaches the handler.
 router.post(
   "/",
+  protectOptional,
   validate(createDeliverySchema),
   asyncHandler(deliveryController.createDelivery)
 );
+
+router.use(protect);
 
 router.get(
   "/",

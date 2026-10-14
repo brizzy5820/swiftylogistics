@@ -104,7 +104,10 @@ function RiderJobView() {
     return () => { active = false }
   }, [id, delivery])
 
-  const availableRequests = deliveries.filter((d) => d.status === 'pending' && (!d.riderId || d.riderId === currentUser?.id))
+  const availableRequests = deliveries.filter((d) => 
+    d.status === 'pending' && 
+    (!d.riderId || d.riderId === currentUser?.id)
+  )
   const incoming = availableRequests.filter((d) => !dismissedRequests.has(d.id))
   const activeJobs = currentUser ? deliveries.filter((d) => d.riderId === currentUser.id && ['accepted', 'picked_up', 'in_transit'].includes(d.status)) : []
   const completed = user ? deliveries.filter((d) => d.riderId === user.id && d.status === 'delivered') : []

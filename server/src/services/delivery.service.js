@@ -73,53 +73,73 @@ const buildAddressSnapshot = (address) => {
   };
 };
 
+// Guest checkout: the client sends the pickup/dropoff pair inline (same shape
+// rides already use) instead of saved Address ids, because an anonymous
+// customer has no address book to look ids up in.
+const buildInlineSnapshot = (location) => {
+  const coords = location?.coords || {};
+  if (
+    !location?.address ||
+    typeof coords.lat !== "number" ||
+    typeof coords.lng !== "number" ||
+    coords.lat < -90 || coords.lat > 90 ||
+    coords.lng < -180 || coords.lng > 180
+  ) {
+    return null;
+  }
+  return { address: location.address, coords: { lat: coords.lat, lng: coords.lng } };
+};
+
 const createDelivery = async (
   userId,
   data
 ) => {
-  const pickupAddress = await Address.findOne({
-    _id: data.pickupAddress,
-    user: userId,
-  });
+  const isGuest = !userId;
+  let pickup;
+  let dropoff;
 
-  if (!pickupAddress) {
-    throw new AppError(
-      "Pickup address not found",
-      404
-    );
+  const inlinePickup = isGuest ? buildInlineSnapshot(data.pickup) : null;
+  const inlineDropoff = isGuest ? buildInlineSnapshot(data.dropoff) : null;
+
+  if (inlinePickup && inlineDropoff) {
+    pickup = inlinePickup;
+    dropoff = inlineDropoff;
+  } else {
+    if (!isGuest) {
+      const pickupAddress = await Address.findOne({
+        _id: data.pickupAddress,
+        user: userId,
+      });
+
+      if (!pickupAddress) {
+        throw new AppError("Pickup address not found", 404);
+      }
+
+      const dropoffAddress = await Address.findOne({
+        _id: data.dropoffAddress,
+        user: userId,
+      });
+
+      if (!dropoffAddress) {
+        throw new AppError("Drop-off address not found", 404);
+      }
+
+      if (
+        !hasValidCoordinates(pickupAddress.coordinates) ||
+        !hasValidCoordinates(dropoffAddress.coordinates)
+      ) {
+        throw new AppError("Both addresses must have valid coordinates", 400);
+      }
+
+      pickup = buildAddressSnapshot(pickupAddress);
+      dropoff = buildAddressSnapshot(dropoffAddress);
+    } else {
+      throw new AppError(
+        "Both locations must have valid coordinates",
+        400
+      );
+    }
   }
-
-  const dropoffAddress = await Address.findOne({
-    _id: data.dropoffAddress,
-    user: userId,
-  });
-
-  if (!dropoffAddress) {
-    throw new AppError(
-      "Drop-off address not found",
-      404
-    );
-  }
-
-  if (
-    !hasValidCoordinates(
-      pickupAddress.coordinates
-    ) ||
-    !hasValidCoordinates(
-      dropoffAddress.coordinates
-    )
-  ) {
-    throw new AppError(
-      "Both addresses must have valid coordinates",
-      400
-    );
-  }
-
-  const pickup =
-    buildAddressSnapshot(pickupAddress);
-
-  const dropoff =
-    buildAddressSnapshot(dropoffAddress);
 
   const distanceKm = calculateDistance(
     pickup.coords,
@@ -201,6 +221,13 @@ const createDelivery = async (
 
     isScheduled,
   });
+
+  // Guest contact so the assigned rider can reach an anonymous customer.
+  if (isGuest) {
+    delivery.guestEmail = data.guestEmail?.toLowerCase()?.trim() || null;
+    delivery.guestPhone = data.guestPhone?.trim() || null;
+    await delivery.save();
+  }
 
   if (initialStatus === "pending") emitJobAvailable(delivery);
 

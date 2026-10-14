@@ -21,7 +21,9 @@ import {
 import { signIn, signInWithSocial, ensureSession, signUp, updateCurrentUser, VEHICLE_TYPES } from '@/lib/api-store'
 import { getErrorMessage } from '@/services/api'
 import SocialAuthButtons from '@/components/SocialAuthButtons'
+import { GuestBar } from '@/components/guest-bar'
 import { BrandEntrance } from '@/components/brand-loader'
+import { useTheme } from '@/components/theme-provider'
 
 // A single labeled input row. The border goes emerald on focus via
 // focus-within, so it works whether the child is an <input> or <select>.
@@ -74,6 +76,7 @@ export default function Auth() {
   const [entrance, setEntrance] = useState(null) // { to, state, name }
   const tabRef = useRef(tab)
   useEffect(() => { tabRef.current = tab }, [tab])
+  const { theme } = useTheme()
 
   const enter = useCallback((user, to) => {
     const fallback = user.role === 'admin' ? '/admin' : user.role === 'rider' ? '/rider' : '/customer'
@@ -252,7 +255,7 @@ export default function Auth() {
   }, [entrance, navigate])
 
   return (
-    <div className="min-h-screen w-full bg-white">
+    <div className={`min-h-screen w-full ${theme === 'dark' ? 'bg-slate-950' : 'bg-white'}`}>
       {entrance && <BrandEntrance name={entrance.name} onDone={finishEntrance} />}
       {/* Image panel — fixed to the left half of the viewport on lg+ */}
       <div className="hidden lg:fixed lg:inset-y-0 lg:right-0 lg:block lg:w-1/2">
@@ -290,16 +293,16 @@ export default function Auth() {
             {role === 'rider' ? <Car className="h-4 w-4" /> : <User className="h-4 w-4" />}
             {role === 'rider' ? "You're signing in as a Rider" : "You're signing in as a Customer"}
           </div>
-
-          <div className="mt-8 w-full rounded-2xl  bg-white py-6 lg:px-3 md:px-2 lg:shadow-none lg:border-none">
+      
+          <div className="mt-6 w-full rounded-2xl bg-white dark:bg-slate-900 py-6 lg:px-3 md:px-2 lg:shadow-none lg:border-none dark:border dark:border-slate-800">
             {/* Tab switcher — hidden on rider step 2, otherwise always here at the top */}
             {!(role === 'rider' && tab === 'signup' && signupStep === 2) && (
               <>
-                <div className="flex rounded-full bg-surface-200 p-1">
+                <div className="flex rounded-full bg-surface-200 dark:bg-slate-800 p-1">
                   <button
                     onClick={() => switchTab('login')}
                     className={`flex-1 rounded-full py-2.5 text-sm font-semibold transition-colors ${
-                      tab === 'login' ? 'bg-brand text-white shadow-sm' : 'text-slate-600'
+                      tab === 'login' ? 'bg-brand text-white shadow-sm' : 'text-slate-600 dark:text-slate-400'
                     }`}
                   >
                     Login
@@ -307,7 +310,7 @@ export default function Auth() {
                   <button
                     onClick={() => switchTab('signup')}
                     className={`flex-1 rounded-full py-2.5 text-sm font-semibold transition-colors ${
-                      tab === 'signup' ? 'bg-brand text-white shadow-sm' : 'text-slate-600'
+                      tab === 'signup' ? 'bg-brand text-white shadow-sm' : 'text-slate-600 dark:text-slate-400'
                     }`}
                   >
                     Sign Up
@@ -316,7 +319,7 @@ export default function Auth() {
 
                 {/* Role label — only shown on signup tab */}
                 {tab === 'signup' && (
-                  <p className="mt-3 text-center text-xs text-slate-400">
+                  <p className="mt-3 text-center text-xs text-slate-400 dark:text-slate-500">
                     Signing up as {role === 'rider' ? 'a rider' : 'a customer'}
                     {role === 'rider' && ' · Step 1 of 2'}
                   </p>
@@ -327,24 +330,37 @@ export default function Auth() {
             {role === 'rider' && tab === 'signup' && signupStep === 2 && (
               <div className="text-center">
                 <p className="text-xs font-bold uppercase tracking-wider text-brand">Step 2 of 2</p>
-                <h2 className="mt-1 text-sm font-bold text-navy">Payment &amp; verification details</h2>
-                <p className="mt-1 text-xs text-slate-500">
+                <h2 className="mt-1 text-sm font-bold text-navy dark:text-slate-100">Payment &amp; verification details</h2>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                   Add these now, or skip and complete them later from your account settings.
                 </p>
               </div>
             )}
 
             {error && (
-              <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-center text-xs text-red-500">
+              <p className="mt-3 rounded-lg bg-red-50 dark:bg-red-900/30 px-3 py-2 text-center text-xs text-red-500 dark:text-red-400">
                 {error}
               </p>
             )}
 
-            {tab === 'login' ? (
+      
+            
+{tab === 'login' ? (
               <form onSubmit={handleLogin} className="mt-5 flex flex-col gap-4">
                 {googleClientId && (
                   <SocialAuthButtons onGoogle={triggerGoogleSignIn} loading={socialLoading} />
                 )}
+
+                {/* Guest checkout — the no-account way in. Only offered to
+                    customers; drivers need a real account to take jobs. */}
+                {role === 'customer' && <GuestBar />}
+
+                <div className="flex items-center gap-3 text-xs text-slate-400 dark:text-slate-500">
+                  <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                  <span>or continue with email</span>
+                  <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                </div>
+
                 <FormField icon={Mail} label="Email">
                   <input
                     type="email"
@@ -477,6 +493,11 @@ export default function Auth() {
                 {googleClientId && (
                   <SocialAuthButtons onGoogle={triggerGoogleSignIn} loading={socialLoading} />
                 )}
+
+                {/* Guest checkout — offered on both tabs, since arriving with a
+                    role preset (e.g. from the landing page) opens Sign Up. */}
+                {role === 'customer' && <GuestBar />}
+
                 <FormField icon={User} label="Full name">
                   <input
                     type="text"

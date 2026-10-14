@@ -385,7 +385,8 @@ if (!effectiveDelivery)
       <CheckCircle className="h-8 w-8 shrink-0 text-emerald-600" />
       <div className="min-w-0 flex-1">
         <p className="font-bold text-emerald-700 text-lg">Package delivered!</p>
-        <p className="text-sm text-slate-600 mt-0.5">Your delivery has been completed successfully.</p>
+        <p className="text-sm text-slate-600 mt-0.5">Your delivery has been completed successfully. <Link to='/customer' className="text-emerald-700 text-sm font-semibold  hover:text-emerald-500">go home for more orders</Link></p>
+        
       </div>
       <button
         type="button"
@@ -397,11 +398,11 @@ if (!effectiveDelivery)
       </button>
     </div>
   ) : !outcomeBannerDismissed && isCancelled ? (
-    <div className="flex items-center gap-4 rounded-2xl bg-red-50 border border-red-200 p-5 pr-3 shadow-lg shadow-red-900/5">
-      <X className="h-8 w-8 shrink-0 text-red-500" />
+    <div className="flex items-center  gap-4 rounded-2xl bg-red-50 border border-red-200 p-5 pr-3 shadow-lg shadow-red-900/5">
+      {/* <X className="h-8 w-8 shrink-0 text-red-700" /> */}
       <div className="min-w-0 flex-1">
-        <p className="font-bold text-red-600 text-lg">Order cancelled</p>
-        <p className="text-sm text-slate-600 mt-0.5">This delivery has been cancelled.</p>
+        <p className="font-bold text-red-700 text-lg">Order cancelled</p>
+        <p className="text-sm text-slate-600 mt-0.5">This delivery has been cancelled, <Link to='/customer' className="text-emerald-700 font-semibold  hover:text-emerald-500">go home for more orders</Link></p>
       </div>
       <button
         type="button"
@@ -422,7 +423,7 @@ if (!effectiveDelivery)
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Status</p>
-              <p className={`mt-1 font-display text-2xl font-bold ${isCancelled || isTerminated ? 'text-red-500' : isDelivered ? 'text-emerald-600' : 'text-emerald-600'}`}>
+              <p className={`mt-1 font-display text-2xl font-bold ${isCancelled || isTerminated ? 'text-red-700' : isDelivered ? 'text-emerald-600' : 'text-emerald-600'}`}>
                 {isTerminated ? 'Terminated' : STATUS_LABEL[deliveryView.status]}
               </p>
             </div>
@@ -567,7 +568,7 @@ if (!effectiveDelivery)
   )
 
   return (
-    <>
+    <AppShell hideMobileHeader>
 
       {/* ── Mobile: full-bleed map with a draggable bottom sheet ── */}
    <div className="lg:hidden h-full">
@@ -617,7 +618,7 @@ if (!effectiveDelivery)
       remount (and re-snap to a taller default) when switching modes. */}
   <MobileDrawer
     key={chatOpen ? 'chat' : 'details'}
-    banner={chatOpen ? null : banner}
+    banner={banner}
     initialSnapIndex={chatOpen ? 2 : 1}
     snapPoints={[14, 52, 88]}
     onHeightChange={handleSheetHeightChange}
@@ -654,8 +655,8 @@ if (!effectiveDelivery)
       
         {banner && <div className="mb-6">{banner}</div>}
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <aside className="lg:col-span-4 space-y-6 overflow-y-auto h-screen">
+          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
+            <aside className="space-y-6 overflow-y-auto lg:col-span-4 lg:h-[calc(100vh-7rem)]">
            
           <div className='flex '>   
           <button
@@ -692,7 +693,7 @@ if (!effectiveDelivery)
           onOpenChange={setChatOpen}
         />
       )}
-    </>
+    </AppShell>
   )
 }
 

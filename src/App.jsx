@@ -4,6 +4,7 @@ import { useLayoutEffect, useEffect, lazy, Suspense } from 'react'
 import { BrandLoader } from './components/brand-loader'
 import { Toaster } from './components/ui/sonner'
 import { GlobalChatNotifier } from './components/global-chat-notifier'
+import { ThemeProvider } from './components/theme-provider'
 
 // Each page is its own chunk: the first paint only downloads what it needs.
 const loadIndex = () => import('./pages/Index')
@@ -127,43 +128,45 @@ export default function App() {
   usePreloadRoutes()
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <ScrollToTop />
-        <GlobalChatNotifier />
-        <Suspense fallback={<BrandLoader />}>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/onboarding" element={<Onboarding />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/customer" element={<CustomerDashboard />} />
-          <Route path="/customer/book" element={<Book />} />
-          <Route path="/customer/ride" element={<Ride />} />
-          <Route path="/customer/notifications" element={<NotificationsPage />} />
-          <Route path="/customer/history" element={<History />} />
-          <Route path="/customer/track" element={<Track />} />
-          <Route path="/customer/track/:id" element={<Track />} />
-          <Route path="/customer/account" element={<Account />} />
-          <Route path="/customer/help" element={<Help />} />
-          <Route path="/customer/actions" element={<Actions />} />
-          <Route path="/customer/schedule" element={<Schedule />} />
-          <Route path="/rider" element={<RiderDashboard />} />
-          <Route path="/rider/job" element={<RiderJob />} />
-          <Route path="/rider/job/:id" element={<RiderJob />} />
-          <Route path="/rider/notifications" element={<RiderNotifications />} />
-          <Route path="/rider/earnings" element={<RiderEarnings />} />
-          <Route path="/rider/account" element={<RiderAccount />} />
-          <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="/admin/customers" element={<AdminCustomers />} />
-          <Route path="/admin/riders" element={<AdminRiders />} />
-          <Route path="/admin/rides" element={<AdminRides />} />
-          <Route path="/admin/deliveries" element={<AdminDeliveries />} />
-          <Route path="/admin/support" element={<AdminSupport />} />
-          <Route path="/admin/account" element={<AdminAccountPage />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-        </Suspense>
-        <Toaster richColors position="top-center" closeButton />
-      </BrowserRouter>
+      <ThemeProvider>
+        <BrowserRouter>
+          <ScrollToTop />
+          <GlobalChatNotifier />
+          <Suspense fallback={<BrandLoader />}>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/onboarding" element={<Onboarding />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/customer" element={<CustomerDashboard />} />
+            <Route path="/customer/book" element={<Book />} />
+            <Route path="/customer/ride" element={<Ride />} />
+            <Route path="/customer/notifications" element={<NotificationsPage />} />
+            <Route path="/customer/history" element={<History />} />
+            <Route path="/customer/track" element={<Track />} />
+            <Route path="/customer/track/:id" element={<Track />} />
+            <Route path="/customer/account" element={<Account />} />
+            <Route path="/customer/help" element={<Help />} />
+            <Route path="/customer/actions" element={<Actions />} />
+            <Route path="/customer/schedule" element={<Schedule />} />
+            <Route path="/rider" element={<RiderDashboard />} />
+            <Route path="/rider/job" element={<RiderJob />} />
+            <Route path="/rider/job/:id" element={<RiderJob />} />
+            <Route path="/rider/notifications" element={<RiderNotifications />} />
+            <Route path="/rider/earnings" element={<RiderEarnings />} />
+            <Route path="/rider/account" element={<RiderAccount />} />
+            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin/customers" element={<AdminCustomers />} />
+            <Route path="/admin/riders" element={<AdminRiders />} />
+            <Route path="/admin/rides" element={<AdminRides />} />
+            <Route path="/admin/deliveries" element={<AdminDeliveries />} />
+            <Route path="/admin/support" element={<AdminSupport />} />
+            <Route path="/admin/account" element={<AdminAccountPage />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+          </Suspense>
+          <Toaster richColors position="top-center" closeButton />
+        </BrowserRouter>
+      </ThemeProvider>
     </QueryClientProvider>
   )
 }

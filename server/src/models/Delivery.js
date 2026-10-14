@@ -5,7 +5,10 @@ const deliverySchema = new mongoose.Schema(
     customer: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      // null for guest (unauthenticated) bookings — the customer is identified
+      // by guestEmail/guestPhone instead, and only that device's localStorage
+      // history is ever linked back to a real account on sign-in.
+      default: null,
     },
 
     rider: {
@@ -150,12 +153,26 @@ isScheduled: {
   default: false,
 },
 
-    // Set true once the customer has confirmed the assigned rider/ride and is
+// Set true once the customer has confirmed the assigned rider/ride and is
     // on the live track page. A rider cannot move a ride from "picked_up" to
     // "in_transit" (i.e. hit "Start trip") until this is true.
     customerConfirmed: {
       type: Boolean,
       default: false,
+    },
+
+    // Guest checkout: email + phone provided by anonymous customer so the
+    // assigned rider can reach them. Only set for guest (unauthenticated) rides.
+    guestEmail: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: null,
+    },
+    guestPhone: {
+      type: String,
+      trim: true,
+      default: null,
     },
 
     // Lightweight in-order chat between the customer and the assigned rider,

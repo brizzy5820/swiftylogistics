@@ -111,7 +111,6 @@ export function MobileDrawer({
   return (
     <div className="fixed inset-0 z-99 lg:hidden" role="dialog" aria-modal="true">
       {onClose && <button type="button" onClick={onClose} className="absolute inset-0 h-full w-full bg-slate-950/25" aria-label="Close drawer" />}
-      {banner && <div className="pointer-events-none absolute inset-x-0 bottom-[30vh] z-10 mx-4">{banner}</div>}
       <div
         ref={sheetRef}
         style={
@@ -140,6 +139,7 @@ export function MobileDrawer({
           className="min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y px-4 pb-3"
           style={{ WebkitOverflowScrolling: 'touch' }}
         >
+          {banner && <div className="mb-4">{banner}</div>}
           {children}
         </div>
         {footer && <div className="shrink-0 border-t border-slate-100 bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">{footer}</div>}

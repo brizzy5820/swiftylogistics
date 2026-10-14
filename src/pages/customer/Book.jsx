@@ -18,6 +18,7 @@ import {
 } from '../../lib/address-suggestions'
 import { AppShell } from '@/components/app-shell'
 import { MobileRouteMap, RouteMapPanel } from '@/components/mobile-route-map'
+import { MobileDrawer } from '@/components/mobile-drawer'
 import { RiderSearchDrawer, SEARCH_COUNTDOWN_MS } from '@/components/rider-search-drawer'
 import { useRequireAuth } from '@/lib/use-require-auth'
 import { createDelivery, updateDeliveryStatus, useStore } from '@/lib/api-store'
@@ -392,6 +393,17 @@ export default function Book() {
   const [submitError, setSubmitError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
+  /* ── Guest contact ──
+     A guest has no contact on file. It is collected here, at the last moment:
+     after "Confirm booking" but before the rider search starts — and on every
+     ride, since the guest session never stores it. That is the one thing that
+     separates a guest from a signed-in customer. */
+  const isGuest = Boolean(user?.isGuest)
+  const [showGuestModal, setShowGuestModal] = useState(false)
+  const [guestEmail, setGuestEmail] = useState('')
+  const [guestPhone, setGuestPhone] = useState('')
+  const [guestModalError, setGuestModalError] = useState('')
+
   /* map UI state */
 
   /* live, in-progress delivery for this customer — drives the live map.
@@ -630,6 +642,13 @@ export default function Book() {
   async function handleSubmit(e) {
     e.preventDefault()
     if (submitting) return
+    // Guest checkout: collect a contact before the rider search, so the rider
+    // has a way to reach an anonymous customer.
+    if (isGuest) {
+      setGuestModalError('')
+      setShowGuestModal(true)
+      return
+    }
     setSubmitError('')
     setSubmitting(true)
     try {
@@ -639,6 +658,46 @@ export default function Book() {
         packageType: pkg,
         weightKg: weight,
         note: note.trim(),
+        guestEmail: isGuest ? guestEmail.trim() || undefined : undefined,
+        guestPhone: isGuest ? guestPhone.trim() || undefined : undefined,
+      })
+      navigator.clipboard?.writeText(delivery.trackingId)
+      setSearchingDeliveryId(delivery.id)
+    } catch (error) {
+      console.error(error)
+      setSubmitError(getErrorMessage(error, 'Unable to create delivery. Please review the route and try again.'))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // Validates the guest's contact, then runs the real submit — creation and
+  // the rider search that follows.
+  async function confirmGuestContact() {
+    const nextEmail = guestEmail.trim()
+    const nextPhone = guestPhone.trim()
+
+    if (!nextEmail && !nextPhone) {
+      setGuestModalError('Add an email or phone number so your rider can reach you.')
+      return
+    }
+    if (nextEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+      setGuestModalError('That email address does not look right.')
+      return
+    }
+
+    setGuestModalError('')
+    setShowGuestModal(false)
+    setSubmitting(true)
+    try {
+      const delivery = await createDelivery({
+        pickup: { address: confirmedPickup, coords: pickupCoords },
+        dropoff: { address: confirmedDropoff, coords: dropoffCoords },
+        packageType: pkg,
+        weightKg: weight,
+        note: note.trim(),
+        guestEmail: nextEmail || undefined,
+        guestPhone: nextPhone || undefined,
       })
       navigator.clipboard?.writeText(delivery.trackingId)
       setSearchingDeliveryId(delivery.id)
@@ -1093,6 +1152,149 @@ export default function Book() {
           timedOut={timedOut}
           countdown={searchCountdown}
         />
+        </>
+      )}
+
+      {/* ── Guest contact — asked on every delivery, right before the rider
+          search. Mobile gets the same draggable bottom sheet as rider search;
+          desktop gets a centred modal. ── */}
+      {showGuestModal && (
+        <>
+          <MobileDrawer
+            fitContent
+            onHeightChange={handleSheetHeightChange}
+            onClose={() => { setShowGuestModal(false); setGuestModalError('') }}
+            footer={(
+              <button
+                type="button"
+                onClick={confirmGuestContact}
+                disabled={submitting}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-400 disabled:opacity-60"
+              >
+                {submitting ? 'Finding a rider…' : 'Continue'} <ArrowRight className="h-4 w-4" />
+              </button>
+            )}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <h2 className="font-display text-xl font-black text-slate-950">How can the rider reach you?</h2>
+                <p className="mt-1 break-words text-sm text-slate-500">
+                  You're booking as a guest. Add an email or phone number so your rider can reach you.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setShowGuestModal(false); setGuestModalError('') }}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {guestModalError && (
+              <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">
+                {guestModalError}
+              </p>
+            )}
+
+            <div className="mt-3 space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-600">Email</label>
+                <input
+                  type="email"
+                  value={guestEmail}
+                  onChange={(e) => { setGuestEmail(e.target.value); setGuestModalError('') }}
+                  placeholder="you@example.com"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-600">Phone</label>
+                <input
+                  type="tel"
+                  value={guestPhone}
+                  onChange={(e) => { setGuestPhone(e.target.value); setGuestModalError('') }}
+                  placeholder="08012345678"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2">
+              <span className="text-xs text-slate-500">Already have an account?</span>
+              <Link to="/auth" className="text-xs font-bold text-emerald-600 hover:text-emerald-700">
+                Sign in
+              </Link>
+            </div>
+          </MobileDrawer>
+
+          {/* Desktop counterpart of the same sheet. */}
+          <div className="fixed inset-0 z-50 hidden items-end justify-center bg-slate-900/50 p-4 sm:items-center lg:flex">
+            <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h2 className="font-display text-xl font-black text-slate-950">How can the rider reach you?</h2>
+                  <p className="mt-1 break-words text-sm text-slate-500">
+                    You're booking as a guest. Add an email or phone number so your rider can reach you.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setShowGuestModal(false); setGuestModalError('') }}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {guestModalError && (
+                <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-600">
+                  {guestModalError}
+                </p>
+              )}
+
+              <div className="space-y-3">
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-600">Email</label>
+                  <input
+                    type="email"
+                    value={guestEmail}
+                    onChange={(e) => { setGuestEmail(e.target.value); setGuestModalError('') }}
+                    placeholder="you@example.com"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-600">Phone</label>
+                  <input
+                    type="tel"
+                    value={guestPhone}
+                    onChange={(e) => { setGuestPhone(e.target.value); setGuestModalError('') }}
+                    placeholder="08012345678"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-emerald-500 focus:bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center gap-2 rounded-xl bg-slate-50 px-3 py-2">
+                <span className="text-xs text-slate-500">Already have an account?</span>
+                <Link to="/auth" className="text-xs font-bold text-emerald-600 hover:text-emerald-700">
+                  Sign in
+                </Link>
+              </div>
+
+              <button
+                type="button"
+                onClick={confirmGuestContact}
+                disabled={submitting}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-3.5 text-sm font-bold text-white shadow-lg shadow-emerald-900/20 transition hover:bg-emerald-400 disabled:opacity-60"
+              >
+                {submitting ? 'Finding a rider…' : 'Continue'} <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
         </>
       )}
     </AppShell>

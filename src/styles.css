@@ -120,23 +120,23 @@
 }
 
 .dark {
-  --background: oklch(0.129 0.042 264.695);
+  --background: oklch(0.09 0.01 264);
   --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
+  --card: oklch(0.12 0.01 264);
   --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
+  --popover: oklch(0.12 0.01 264);
   --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.279 0.041 260.031);
+  --primary: oklch(0.25 0.02 264);
+  --primary-foreground: oklch(0.984 0.003 247.858);
+  --secondary: oklch(0.16 0.015 264);
   --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
+  --muted: oklch(0.16 0.015 264);
   --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
+  --accent: oklch(0.20 0.02 264);
   --accent-foreground: oklch(0.984 0.003 247.858);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(1 0 0 / 10%);
+  --border: oklch(1 0 0 / 15%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.551 0.027 264.364);
   --chart-1: oklch(0.488 0.243 264.376);
@@ -144,14 +144,133 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.208 0.042 265.755);
+  --sidebar: oklch(0.12 0.01 264);
   --sidebar-foreground: oklch(0.984 0.003 247.858);
   --sidebar-primary: oklch(0.488 0.243 264.376);
   --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.279 0.041 260.031);
+  --sidebar-accent: oklch(0.20 0.02 264);
   --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-border: oklch(1 0 0 / 15%);
   --sidebar-ring: oklch(0.551 0.027 264.364);
+}
+
+/* Force dark theme: no white cards, no white backgrounds - all deep black/gray */
+.dark .bg-white,
+.dark .bg-slate-50,
+.dark .bg-gray-50,
+.dark .bg-zinc-50,
+.dark .bg-neutral-50,
+.dark .bg-stone-50,
+.dark .bg-slate-100,
+.dark .bg-gray-100,
+.dark .bg-zinc-100,
+.dark .bg-neutral-100,
+.dark .bg-stone-100 {
+  background-color: var(--color-card) !important;
+}
+
+.dark .border-white,
+.dark .border-slate-50 {
+  border-color: var(--color-border) !important;
+}
+
+.dark .bg-gradient-to-b,
+.dark .bg-gradient-to-t,
+.dark .bg-gradient-to-r,
+.dark .bg-gradient-to-l {
+  --tw-gradient-from: var(--color-card) !important;
+  --tw-gradient-to: var(--color-card) !important;
+}
+
+/* Override all rounded cards with white bg */
+.dark .rounded-2xl,
+.dark .rounded-xl,
+.dark .rounded-3xl,
+.dark .rounded-lg {
+  background-color: var(--color-card) !important;
+}
+
+/* Fix text colors in dark mode */
+.dark .text-slate-900,
+.dark .text-slate-950,
+.dark .text-black {
+  color: var(--color-foreground) !important;
+}
+
+.dark .text-slate-700,
+.dark .text-slate-800 {
+  color: var(--color-foreground) !important;
+}
+
+/* Fix borders in dark mode */
+.dark .border-slate-200,
+.dark .border-slate-300,
+.dark .border-gray-200,
+.dark .border-gray-300 {
+  border-color: var(--color-border) !important;
+}
+
+/* Fix hover states */
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-slate-100:hover,
+.dark .hover\:bg-gray-50:hover,
+.dark .hover\:bg-gray-100:hover {
+  background-color: var(--color-accent) !important;
+}
+
+.dark .hover\:bg-slate-200:hover,
+.dark .hover\:bg-gray-200:hover {
+  background-color: var(--color-border) !important;
+}
+
+/* Fix placeholder text */
+.dark input::placeholder,
+.dark textarea::placeholder,
+.dark .placeholder-text {
+  color: var(--muted-foreground) !important;
+}
+
+/* Fix focus rings */
+.dark focus-within\:border-emerald-400:focus-within {
+  border-color: var(--color-ring) !important;
+}
+
+/* Fix scrollbar in dark mode */
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.3);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.5);
+}
+
+/* Fix sheet/drawer backgrounds */
+.dark .bg-surface-200,
+.dark .bg-surface-100 {
+  background-color: var(--color-card) !important;
+}
+
+/* Fix backdrop blur */
+.dark .backdrop-blur-xl {
+  background-color: color-mix(in srgb, var(--color-card) 85%, transparent) !important;
+}
+
+.dark .bg-white\/90,
+.dark .bg-white\/80,
+.dark .bg-white\/95,
+.dark .bg-white\/70 {
+  background-color: color-mix(in srgb, var(--color-card) 90%, transparent) !important;
+}
+
+/* Fix emerald background colors in dark mode */
+.dark .bg-emerald-50,
+.dark .bg-emerald-100 {
+  background-color: color-mix(in srgb, var(--color-primary) 15%, transparent) !important;
+}
+
+.dark .bg-emerald-900\/30,
+.dark .bg-emerald-900\/20 {
+  background-color: color-mix(in srgb, var(--color-primary) 20%, transparent) !important;
 }
 
 @layer base {

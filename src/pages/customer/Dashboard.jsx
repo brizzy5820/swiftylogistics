@@ -17,9 +17,15 @@ const PLAN_CARDS = [
 
 export default function CustomerDashboard() {
   let navigate= useNavigate("")
+  // `useRequireAuth` resolves the guest identity too, so a guest browsing
+  // without an account lands here with a usable user instead of spinning on
+  // the loader forever (`useCurrentUser` is null whenever there is no session).
   const user = useRequireAuth('customer')
-  const { user: currentUser, loading } = useCurrentUser()
-  const deliveries = useStore((s) => currentUser ? s.deliveries.filter((d) => d.customerId === currentUser.id) : [])
+  const { user: sessionUser, loading } = useCurrentUser()
+  const viewedUser = sessionUser ?? user
+  // A guest's orders carry the device-scoped guest id as their customerId, so
+  // this same filter covers signed-in customers and guests alike.
+  const deliveries = useStore((s) => (viewedUser ? s.deliveries.filter((d) => d.customerId === viewedUser.id) : []))
   // `useCurrentUser().loading` only covers the session, not the trip history
   // that lands in the same hydrate() call — so a returning customer with real
   // orders briefly rendered the "no orders yet" empty state before the store
@@ -30,8 +36,8 @@ export default function CustomerDashboard() {
   // has none (empty state), or is still on the way (placeholder); it must
   // never pass through the empty state in between.
   const showHistorySkeleton = !storeHydrated && !storeHydrateFailed
-  if (!currentUser) return <BrandLoader />
-  if (loading) {
+  if (!viewedUser) return <BrandLoader />
+  if (loading && !viewedUser.isGuest) {
     return (
       <AppShell>
         <main className="px-4 py-6 sm:px-6 hidden lg:block lg:px-8">
@@ -56,8 +62,8 @@ export default function CustomerDashboard() {
       </AppShell>
     )
   }
-  const firstName = currentUser.name.split(' ')[0]
-  const secondName=  currentUser.name.split(' ')[1]
+  const firstName = viewedUser.name?.split(' ')[0] || 'there'
+  const secondName=  viewedUser.name?.split(' ')[1]
   const recent = deliveries.slice(0, 2)
 
   return (

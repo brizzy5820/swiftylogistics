@@ -1,9 +1,24 @@
 import rideService from "../services/ride.services.js";
 
 const createRide = async (req, res) => {
+  const { email, phone, ...rideData } = req.body;
+  // Authenticated customers book against their own account; anonymous ones
+  // book as a guest, so we need at least one way for the rider to reach them.
+  const userId = req.user?._id || null;
+  const guestContact = (!req.user && (email || phone)) ? { email, phone } : null;
+
+  if (!userId && !guestContact) {
+    return res.status(400).json({
+      success: false,
+      code: "GUEST_CONTACT_REQUIRED",
+      message: "Provide an email or phone number so your rider can reach you.",
+    });
+  }
+
   const ride = await rideService.createRide(
-    req.user._id,
-    req.body
+    userId,
+    rideData,
+    guestContact
   );
 
   return res.status(201).json({

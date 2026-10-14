@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ensureSession, useStore, getCurrentUser } from './api-store'
+import { ensureSession, useStore, getCurrentUser, getGuestUser } from './api-store'
 
 export function useRequireAuth(requiredRole) {
   const navigate = useNavigate()
@@ -9,9 +9,10 @@ export function useRequireAuth(requiredRole) {
   // very first frame; the server check still runs in the background.
   const hasToken = typeof window !== 'undefined' && !!(localStorage.getItem('swifty_access_token') || sessionStorage.getItem('swifty_access_token'))
   const cached = hasToken ? getCurrentUser() : null
+  const guest = !cached && requiredRole === 'customer' ? getGuestUser() : null
   const cachedOk = !!cached && (!requiredRole || cached.role === requiredRole)
-  const [user, setUser] = useState(cachedOk ? cached : null)
-  const [checking, setChecking] = useState(!cachedOk)
+  const [user, setUser] = useState(cachedOk ? cached : guest)
+  const [checking, setChecking] = useState(!cachedOk && !guest)
   const session = useStore((s) => s.session)
   const loading = useStore((s) => s.loading)
 
@@ -28,6 +29,17 @@ export function useRequireAuth(requiredRole) {
       if (!active) return
       
       if (!currentUser) {
+        // Guest checkout lets an anonymous customer use the customer pages
+        // once they have left contact details here. Drivers and admins still
+        // need a real account.
+        if (requiredRole === 'customer') {
+          const guestUser = getGuestUser()
+          if (guestUser) {
+            setUser(guestUser)
+            setChecking(false)
+            return
+          }
+        }
         navigate('/auth', { replace: true, state: { from: location.pathname + location.search, intent: location.state ?? null, role: requiredRole } })
         return
       }

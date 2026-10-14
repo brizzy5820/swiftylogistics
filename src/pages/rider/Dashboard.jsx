@@ -222,7 +222,12 @@ export default function RiderDashboard() {
   // later, from useRequireAuth's own async effect) kept using a stale
   // "user is null" result until something else happened to emit again.
   const deliveries = useStore((s) => s.deliveries)
-  const availableRequests = user ? deliveries.filter((d) => d.status === 'pending' && (!d.riderId || d.riderId === user.id)) : []
+  
+  // All riders see all pending requests
+  const availableRequests = user ? deliveries.filter((d) => 
+    d.status === 'pending' && 
+    (!d.riderId || d.riderId === user.id)
+  ) : []
   const incoming = availableRequests.filter((d) => !dismissedRequests.has(d.id))
   const myJobs = user ? deliveries.filter((d) => d.riderId === user.id && d.status !== 'delivered' && d.status !== 'cancelled') : []
   const completed = user ? deliveries.filter((d) => d.riderId === user.id && d.status === 'delivered') : []

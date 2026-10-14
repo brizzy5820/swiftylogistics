@@ -22,6 +22,11 @@ const createRideSchema = z.object({
   // is now honoured instead of being silently overwritten.
   customPrice: z.number().positive().max(1_000_000).optional(),
   paymentMethod: z.string().trim().min(1).max(50).optional(),
+  // Guest checkout: anonymous customers send a contact so the assigned rider
+  // can reach them. Must be declared here — validate() replaces req.body with
+  // the parsed output, which strips undeclared keys.
+  email: z.string().email().optional(),
+  phone: z.string().min(1).optional(),
 })
 
 export { createRideSchema };

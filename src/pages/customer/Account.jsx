@@ -27,7 +27,7 @@ import { AppShell } from '@/components/app-shell'
 import { BottomSheet } from '@/components/bottom-sheet'
 import { PageHeader } from '@/components/page-header'
 import { useRequireAuth } from '@/lib/use-require-auth'
-import { signOut, updateCurrentUser, changePassword, useStore, STATUS_LABEL } from '@/lib/api-store'
+import { signOut, updateCurrentUser, changePassword, useStore, STATUS_LABEL, getGuestActivities } from '@/lib/api-store'
 import { readImageAsDataUrl } from '@/lib/image'
 
 const SECTIONS = [
@@ -68,6 +68,13 @@ export default function Account() {
   }, [location.state, location.pathname, navigate])
 
   if (!accountUser) return <BrandLoader />
+
+  // Guests have no account behind them, so there is no profile to edit. The
+  // Account screen for a guest is simply the door back to signing in — keeping
+  // the promise that their trips pick up again once they do.
+  if (accountUser.isGuest) {
+    return <GuestAccountPanel activities={getGuestActivities()} />
+  }
 
   async function handleAvatarChange(event) {
     const file = event.target.files?.[0]
@@ -591,5 +598,96 @@ function PreferenceRow({ title, text, checked, onChange }) {
         <span className="block text-xs text-slate-500">{text}</span>
       </span>
     </label>
+  )
+}
+
+// Guest Account screen: no profile, settings or history endpoint exists for an
+// anonymous customer, so this is the sign-in door plus the trips this device
+// has recorded so far. Signing in hands them over to the real account (see
+// linkGuestActivitiesToUser in api-store).
+function GuestAccountPanel({ activities }) {
+  return (
+   <AppShell > <div className=" items-center   lg:px-16 py-3 ">
+      <div className="rounded-2xl border border-slate-100  p-6">
+        <div className="flex items-center justify-center gap-3">
+          <div className="lg:h-75 ">
+           <img className="w-full h-full rounded-2xl object-contain" src="/guestimg (2).png" alt="Guest" />
+          </div>
+        </div>
+
+      <div className="bg-white  px-6 mt-2  lg:px-6 py-6 sm:px-4 rounded-2xl">
+ <p className="mt-4 text-sm leading-6 text-slate-600">
+          You're using Swifty without an account.  — sign in or create an account for full feature access
+    
+        </p>
+
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Link
+            to="/auth"
+            state={{ role: 'customer', guestIntent: 'signup' }}
+            className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-500"
+          >
+           Sign up
+          </Link>
+          <Link
+            to="/auth"
+            state={{ role: 'customer', guestIntent: 'login' }}
+            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+          >
+         Log in
+          </Link>
+        </div>
+      </div>
+      </div>
+
+      <div className=" p-6">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-sm font-bold text-slate-700">
+              <History className="h-4 w-4 text-emerald-600" /> Activity on this device
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {activities.length === 0
+                ? 'No trips yet.'
+                : `${activities.length} ${activities.length === 1 ? 'trip' : 'trips'} booked as a guest.`}
+            </p>
+          </div>
+          {activities.length > 0 && (
+            <Link
+              to="/customer/history"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50"
+            >
+              View all <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
+          )}
+        </div>
+        {activities.length > 0 && (
+          <div className="mt-4 divide-y divide-slate-100 rounded-2xl bg-gray-100">
+            {activities.slice(0, 5).map((delivery) => (
+              <Link
+                key={delivery.id}
+                to={`/customer/track/${delivery.id}`}
+                className="flex items-center gap-3 px-4 py-3 transition hover:bg-slate-50"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                  <Package className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-bold text-slate-900">{delivery.id}</span>
+                  <span className="block truncate text-xs text-slate-500">
+                    {delivery.pickup?.address} to {delivery.dropoff?.address}
+                  </span>
+                </span>
+                <span className="hidden items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase text-slate-500 sm:inline-flex">
+                  <Clock className="h-3 w-3" /> {STATUS_LABEL[delivery.status]}
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+    </AppShell>
   )
 }
