@@ -11,7 +11,7 @@ const getPublicTracking = async (req, res) => {
 };
 
 const confirmTracking = async (req, res) => {
-  const delivery = await trackingService.confirmTracking(req.user._id, req.params.deliveryId);
+  const delivery = await trackingService.confirmTracking(req.user?._id, req.params.deliveryId);
   return res.status(200).json({ success: true, message: "Confirmed", delivery });
 };
 

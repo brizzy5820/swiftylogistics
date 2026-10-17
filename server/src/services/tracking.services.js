@@ -45,16 +45,43 @@ const getTracking = async (userId, deliveryId) => {
 };
 
 const getPublicTracking = async (trackingId) => {
-  const delivery = await Delivery.findOne({ trackingId }).populate("rider", "name phone vehicleType vehicleColor plateNumber rating");
+  const delivery = await Delivery.findOne({ trackingId })
+    .populate("rider", "name phone vehicleType vehicleColor plateNumber rating")
+    .populate("customer", "name phone email avatar");
   if (!delivery) throw new AppError("Delivery not found", 404);
-  return { trackingId: delivery.trackingId, id: delivery._id, type: delivery.type, status: delivery.status, pickup: delivery.pickup, dropoff: delivery.dropoff, courierPosition: delivery.courierPosition, statusTimestamps: delivery.statusTimestamps, rider: delivery.rider, riderName: delivery.riderName, price: delivery.price, distanceKm: delivery.distanceKm, etaMinutes: delivery.etaMinutes, createdAt: delivery.createdAt, customerConfirmed: delivery.customerConfirmed };
+  return {
+    trackingId: delivery.trackingId,
+    id: delivery._id,
+    _id: delivery._id,
+    type: delivery.type,
+    status: delivery.status,
+    pickup: delivery.pickup,
+    dropoff: delivery.dropoff,
+    courierPosition: delivery.courierPosition,
+    statusTimestamps: delivery.statusTimestamps,
+    timeline: delivery.timeline,
+    rider: delivery.rider,
+    riderName: delivery.riderName,
+    price: delivery.price,
+    distanceKm: delivery.distanceKm,
+    etaMinutes: delivery.etaMinutes,
+    createdAt: delivery.createdAt,
+    customerConfirmed: delivery.customerConfirmed,
+    isGuestOrder: delivery.isGuestOrder,
+    guestInfo: delivery.guestInfo,
+    customer: delivery.customer,
+    customerProfile: delivery.customerProfile,
+  };
 };
 
 // Called when the customer opens the live track page for an assigned
 // ride/delivery. This is the gate a rider's "Start trip" action checks —
 // see updateDeliveryStatus in rider.services.js.
 const confirmTracking = async (userId, deliveryId) => {
-  const delivery = await Delivery.findOne({ _id: deliveryId, customer: userId });
+  const query = userId
+    ? { _id: deliveryId, $or: [{ customer: userId }, { isGuestOrder: true }, { customer: null }] }
+    : { _id: deliveryId, $or: [{ isGuestOrder: true }, { customer: null }] };
+  const delivery = await Delivery.findOne(query);
   if (!delivery) throw new AppError("Delivery not found", 404);
   if (!delivery.rider) throw new AppError("No rider has been assigned yet", 400);
   if (!delivery.customerConfirmed) {

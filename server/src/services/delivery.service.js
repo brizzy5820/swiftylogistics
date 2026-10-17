@@ -173,14 +173,47 @@ const createDelivery = async (
     ? "scheduled"
     : "pending";
 
+  const guestInfo = isGuest ? {
+    guestId: data.guestInfo?.guestId || data.guestId || `guest_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`,
+    name: data.guestInfo?.name || data.name || data.pickup?.contactName || "Guest Customer",
+    phone: data.guestInfo?.phone || data.guestPhone || data.phone || data.pickup?.contactPhone || "",
+    email: data.guestInfo?.email || data.guestEmail || data.email || "",
+  } : undefined;
+
+  const guestEmail = isGuest ? (data.guestEmail?.toLowerCase()?.trim() || guestInfo?.email?.toLowerCase()?.trim() || null) : null;
+  const guestPhone = isGuest ? (data.guestPhone?.trim() || guestInfo?.phone?.trim() || null) : null;
+  const farePrice = calculatePrice(distanceKm, packageType);
+
   const delivery = await Delivery.create({
-    customer: userId,
+    customer: userId || null,
+
+    isGuestOrder: isGuest,
+
+    guestInfo,
+
+    guestEmail,
+
+    guestPhone,
 
     type: "delivery",
 
-    pickup,
+    pickup: {
+      address: pickup.address,
+      coords: pickup.coords,
+      lat: pickup.coords.lat,
+      lng: pickup.coords.lng,
+      contactName: data.pickup?.contactName || guestInfo?.name,
+      contactPhone: data.pickup?.contactPhone || guestInfo?.phone,
+    },
 
-    dropoff,
+    dropoff: {
+      address: dropoff.address,
+      coords: dropoff.coords,
+      lat: dropoff.coords.lat,
+      lng: dropoff.coords.lng,
+      recipientName: data.dropoff?.recipientName || data.recipientName,
+      recipientPhone: data.dropoff?.recipientPhone || data.recipientPhone,
+    },
 
     packageType,
 
@@ -188,10 +221,9 @@ const createDelivery = async (
 
     note: data.note || "",
 
-    price: calculatePrice(
-      distanceKm,
-      packageType
-    ),
+    price: farePrice,
+
+    fare: farePrice,
 
     distanceKm:
       Math.round(distanceKm * 10) / 10,
@@ -217,17 +249,18 @@ const createDelivery = async (
       [initialStatus]: new Date(),
     },
 
+    timeline: [
+      {
+        status: initialStatus,
+        timestamp: new Date(),
+        note: isScheduled ? "Delivery scheduled" : "Order placed",
+      },
+    ],
+
     scheduledFor,
 
     isScheduled,
   });
-
-  // Guest contact so the assigned rider can reach an anonymous customer.
-  if (isGuest) {
-    delivery.guestEmail = data.guestEmail?.toLowerCase()?.trim() || null;
-    delivery.guestPhone = data.guestPhone?.trim() || null;
-    await delivery.save();
-  }
 
   if (initialStatus === "pending") emitJobAvailable(delivery);
 
@@ -238,6 +271,10 @@ const getUserDeliveries = async (
   userId,
   role = "customer"
 ) => {
+  if (!userId && role !== "rider") {
+    return [];
+  }
+
   const filter = role === "rider"
     ? {
         type: { $in: ["delivery", "ride"] },
@@ -253,6 +290,10 @@ const getUserDeliveries = async (
       "rider",
       "name phone vehicleType vehicleColor plateNumber rating"
     )
+    .populate(
+      "customer",
+      "name phone email avatar"
+    )
     .sort({
       createdAt: -1,
     });
@@ -262,14 +303,17 @@ const getDeliveryById = async (
   userId,
   deliveryId
 ) => {
+  const query = userId
+    ? { _id: deliveryId, customer: userId, type: "delivery" }
+    : { _id: deliveryId, type: "delivery" };
+
   const delivery =
-    await Delivery.findOne({
-      _id: deliveryId,
-      customer: userId,
-      type: "delivery",
-    }).populate(
+    await Delivery.findOne(query).populate(
       "rider",
       "name phone vehicleType vehicleColor plateNumber rating"
+    ).populate(
+      "customer",
+      "name phone email avatar"
     );
 
   if (!delivery) {
@@ -286,12 +330,11 @@ const cancelDelivery = async (
   userId,
   deliveryId
 ) => {
-  const delivery =
-    await Delivery.findOne({
-      _id: deliveryId,
-      customer: userId,
-      type: "delivery",
-    });
+  const query = userId
+    ? { _id: deliveryId, customer: userId, type: "delivery" }
+    : { _id: deliveryId, type: "delivery" };
+
+  const delivery = await Delivery.findOne(query);
 
   if (!delivery) {
     throw new AppError(
@@ -325,6 +368,9 @@ const cancelDelivery = async (
     new Date()
   );
 
+  if (!delivery.timeline) delivery.timeline = [];
+  delivery.timeline.push({ status: "cancelled", timestamp: new Date(), note: "Order cancelled" });
+
   await delivery.save();
 
   if (delivery.rider) {
@@ -342,10 +388,15 @@ const getDeliveryByTrackingId = async (
   const delivery =
     await Delivery.findOne({
       trackingId,
-    }).populate(
-      "rider",
-      "name phone vehicleType vehicleColor plateNumber rating"
-    );
+    })
+      .populate(
+        "rider",
+        "name phone vehicleType vehicleColor plateNumber rating"
+      )
+      .populate(
+        "customer",
+        "name phone email avatar"
+      );
 
   if (!delivery) {
     throw new AppError(
@@ -357,10 +408,30 @@ const getDeliveryByTrackingId = async (
   return delivery;
 };
 
+const getDeliveryForRider = async (riderId, deliveryId) => {
+  // Rider can fetch deliveries assigned to them.
+  const delivery = await Delivery.findOne({
+    _id: deliveryId,
+    rider: riderId,
+    type: "delivery",
+  })
+    .populate(
+      "rider",
+      "name phone vehicleType vehicleColor plateNumber rating"
+    )
+    .populate(
+      "customer",
+      "name phone email avatar"
+    );
+
+  return delivery;
+};
+
 export default {
   createDelivery,
   getUserDeliveries,
   getDeliveryById,
+  getDeliveryForRider,
   cancelDelivery,
   getDeliveryByTrackingId,
 };

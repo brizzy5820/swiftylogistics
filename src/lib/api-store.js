@@ -176,7 +176,7 @@ function mergeGuestDeliveries() {
   ]
   store.scheduled = store.deliveries.filter((item) => item.status === 'scheduled')
 }
-
+const token = () => localStorage.getItem('swifty_access_token') || sessionStorage.getItem('swifty_access_token')
 // Called after a successful sign-in / sign-up. Only the device that actually
 // holds the guest's localStorage data can hand it over, so this is the one and
 // only place guest history ever becomes account history. The device is the
@@ -191,6 +191,89 @@ function linkGuestActivitiesToUser(userId) {
     linked.includes(d) ? { ...d, customerId: userId, customer: userId } : d
   )
   clearGuestSession()
+}
+
+// ── Pending Addresses (persistent address flow) ────────────────────────
+const PENDING_PICKUP_KEY = 'swifty_pending_pickup'
+const PENDING_DROPOFF_KEY = 'swifty_pending_dropoff'
+
+export function normalizePendingAddress(data) {
+  if (!data) return null
+  if (typeof data === 'string') {
+    return { text: data, coords: null }
+  }
+  const text = typeof data.text === 'string' ? data.text : (typeof data.address === 'string' ? data.address : (typeof data.label === 'string' ? data.label : ''))
+  let coords = null
+  if (data.coords && typeof data.coords.lat === 'number' && typeof data.coords.lng === 'number') {
+    coords = { lat: Number(data.coords.lat), lng: Number(data.coords.lng) }
+  } else if (typeof data.lat === 'number' && typeof data.lng === 'number') {
+    coords = { lat: Number(data.lat), lng: Number(data.lng) }
+  } else if (data.coordinates && typeof data.coordinates.latitude === 'number' && typeof data.coordinates.longitude === 'number') {
+    coords = { lat: Number(data.coordinates.latitude), lng: Number(data.coordinates.longitude) }
+  }
+  return { text, coords }
+}
+
+function getStoredPendingPickup() {
+  try {
+    const raw = sessionStorage.getItem(PENDING_PICKUP_KEY)
+    if (!raw) return null
+    return normalizePendingAddress(JSON.parse(raw))
+  } catch {}
+  return null
+}
+
+function getStoredPendingDropoff() {
+  try {
+    const raw = sessionStorage.getItem(PENDING_DROPOFF_KEY)
+    if (!raw) return null
+    return normalizePendingAddress(JSON.parse(raw))
+  } catch {}
+  return null
+}
+
+export function setPendingPickup(data) {
+  const normalized = normalizePendingAddress(data)
+  store.pendingPickup = normalized
+  try {
+    if (normalized) {
+      sessionStorage.setItem(PENDING_PICKUP_KEY, JSON.stringify(normalized))
+    } else {
+      sessionStorage.removeItem(PENDING_PICKUP_KEY)
+    }
+  } catch {}
+  emit()
+  return normalized
+}
+
+export function setPendingDropoff(data) {
+  const normalized = normalizePendingAddress(data)
+  store.pendingDropoff = normalized
+  try {
+    if (normalized) {
+      sessionStorage.setItem(PENDING_DROPOFF_KEY, JSON.stringify(normalized))
+    } else {
+      sessionStorage.removeItem(PENDING_DROPOFF_KEY)
+    }
+  } catch {}
+  emit()
+  return normalized
+}
+
+export function clearPendingAddresses() {
+  store.pendingPickup = null
+  store.pendingDropoff = null
+  try {
+    sessionStorage.removeItem(PENDING_PICKUP_KEY)
+    sessionStorage.removeItem(PENDING_DROPOFF_KEY)
+  } catch {}
+  emit()
+}
+
+export function getPendingAddresses() {
+  const pickup = store.pendingPickup || getStoredPendingPickup()
+  const dropoff = store.pendingDropoff || getStoredPendingDropoff()
+  return { pickup, dropoff }
 }
 
 let store = {
@@ -208,7 +291,9 @@ let store = {
   // nothing was ever going to fetch anything.
   loading: Boolean(token()) && !storedSession && !storedUsers,
   hydrateFailed: false,
-  theme: getStoredTheme()
+  theme: getStoredTheme(),
+  pendingPickup: getStoredPendingPickup(),
+  pendingDropoff: getStoredPendingDropoff(),
 }
 const listeners = new Set()
 let loadPromise = null
@@ -230,7 +315,7 @@ const emit = () => {
   persistGuestDeliveries()
   listeners.forEach((listener) => listener())
 }
-const token = () => localStorage.getItem('swifty_access_token') || sessionStorage.getItem('swifty_access_token')
+
 
 function mapUser(user) {
   if (!user) return user
@@ -247,12 +332,39 @@ export function mapOrder(order) {
   if (!order) return order
   const customer = order.customer && typeof order.customer === 'object' ? order.customer : null
   const rider = order.rider && typeof order.rider === 'object' ? order.rider : null
+  const guestInfo = order.guestInfo || null
+  const isGuestOrder = Boolean(order.isGuestOrder || (!order.customer && !order.customerId) || guestInfo)
+  const customerName =
+    order.customerProfile?.name ||
+    customer?.name ||
+    guestInfo?.name ||
+    order.customerName ||
+    order.pickup?.contactName ||
+    'Guest Customer'
+  const customerPhone =
+    order.customerProfile?.phone ||
+    customer?.phone ||
+    guestInfo?.phone ||
+    order.guestPhone ||
+    order.pickup?.contactPhone ||
+    ''
+  const customerEmail =
+    order.customerProfile?.email ||
+    customer?.email ||
+    guestInfo?.email ||
+    order.guestEmail ||
+    ''
+
   return {
     ...order,
     id: order._id || order.id,
-    customerId: customer?._id || order.customerId || order.customer,
-    customerName: customer?.name || order.customerName,
-    riderId: rider?._id || order.riderId || order.rider,
+    isGuestOrder,
+    guestInfo,
+    customerId: customer?._id || order.customerId || order.customer || null,
+    customerName,
+    customerPhone,
+    customerEmail,
+    riderId: rider?._id || order.riderId || order.rider || null,
     riderName: rider?.name || order.riderName || null,
     createdAt: order.createdAt ? new Date(order.createdAt).getTime() : Date.now(),
     scheduledFor: order.scheduledFor ? new Date(order.scheduledFor).getTime() : null,
@@ -273,14 +385,18 @@ export function upsertDelivery(mapped) {
 // connection. Every event patches the store directly so status changes
 // (driver picked up / delivered / etc.) show up without a refresh.
 function wireSocket() {
-  const socket = connectSocket(token())
+  const socket = connectSocket()
   if (!socket || socket._swiftyWired) return
   socket._swiftyWired = true
 
-  socket.on('order:update', (order) => {
+  const handleUpdate = (order) => {
     upsertDelivery(mapOrder(order))
     emit()
-  })
+  }
+
+  socket.on('order:update', handleUpdate)
+  socket.on('job_status_updated', handleUpdate)
+  socket.on('delivery_updated', handleUpdate)
 
   socket.on('job:new', (order) => {
     const current = getCurrentUser()
@@ -328,10 +444,10 @@ async function hydrate() {
   loadPromise = (async () => {
     try {
       const me = await api.getMe()
-      store.session = { userId: me.user.id || me.user._id, role: me.user.role }
+      store.session = { userId: me.user.id || me.user._id, role: me.user.role, activeMode: me.user.activeMode }
       store.users = [mapUser(me.user)]
       wireSocket()
-      if (me.user.role === 'admin') {
+      if (me.user.role === 'admin' || me.user.activeMode === 'admin') {
         const [users, orders, tickets] = await Promise.all([
           api.getAdminUsers(), api.getAdminOrders(), api.getSupportTickets(true).catch(() => ({ tickets: [] })),
         ])
@@ -414,7 +530,7 @@ export async function ensureSession() {
 
 export function getCurrentUser() {
   const current = store.users.find((user) => String(user._id || user.id) === String(store.session?.userId))
-  return current || (store.session ? { id: store.session.userId, role: store.session.role } : null)
+  return current || (store.session ? { id: store.session.userId, role: store.session.role, activeMode: store.session.activeMode } : null)
 }
 
 function clearSessionFlags() {
@@ -424,12 +540,37 @@ function clearSessionFlags() {
 export async function signIn(email, password) {
   const data = await api.login({ email, password })
   api.setToken(data.accessToken)
-  store.session = { userId: data.user.id || data.user._id, role: data.user.role }
+  store.session = { userId: data.user.id || data.user._id, role: data.user.role, activeMode: data.user.activeMode }
   store.users = [data.user]
   store.hydrated = false
   store.hydrateFailed = false
   clearSessionFlags()
   linkGuestActivitiesToUser(store.session.userId)
+  emit()
+  await hydrate()
+  return data.user
+}
+
+export async function adminSignIn(email, password) {
+  let data
+  try {
+    data = await api.adminLogin({ email, password })
+  } catch (err) {
+    if (err.status === 404 || err.status === 405) {
+      data = await api.login({ email, password })
+    } else {
+      throw err
+    }
+  }
+  if (data.user.role !== 'admin' && data.user.activeMode !== 'admin') {
+    throw new Error('Access denied. Administrator privileges required.')
+  }
+  api.setToken(data.accessToken)
+  store.session = { userId: data.user.id || data.user._id, role: data.user.role, activeMode: data.user.activeMode }
+  store.users = [data.user]
+  store.hydrated = false
+  store.hydrateFailed = false
+  clearSessionFlags()
   emit()
   await hydrate()
   return data.user
@@ -438,7 +579,7 @@ export async function signIn(email, password) {
 export async function signInWithSocial(provider, idToken, role, intent = 'login') {
   const data = await api.socialAuth({ provider, idToken, role, intent })
   api.setToken(data.accessToken)
-  store.session = { userId: data.user.id || data.user._id, role: data.user.role }
+  store.session = { userId: data.user.id || data.user._id, role: data.user.activeMode || data.user.role }
   store.users = [data.user]
   store.hydrated = false
   store.hydrateFailed = false
@@ -446,13 +587,13 @@ export async function signInWithSocial(provider, idToken, role, intent = 'login'
   linkGuestActivitiesToUser(store.session.userId)
   emit()
   await hydrate()
-  return data.user
+  return { ...data.user, isNew: Boolean(data.isNew) }
 }
 
 export async function signUp(name, email, role, details = {}) {
   const data = await api.register({ name, email, password: details.password, phone: details.phone, role })
   api.setToken(data.accessToken)
-  store.session = { userId: data.user.id || data.user._id, role: data.user.role }
+  store.session = { userId: data.user.id || data.user._id, role: data.user.activeMode || data.user.role }
   store.users = [data.user]
   store.hydrated = false
   store.hydrateFailed = false
@@ -464,7 +605,51 @@ export async function signUp(name, email, role, details = {}) {
     const profile = Object.fromEntries(Object.entries(details).filter(([key]) => key !== 'password' && details[key]))
     if (Object.keys(profile).length) await updateCurrentUser(profile)
   }
-  return getCurrentUser()
+  const curr = getCurrentUser()
+  return { ...curr, isNew: true }
+}
+
+export async function switchActiveMode(targetMode) {
+  const current = getCurrentUser()
+  if (!current || current.isGuest) {
+    throw new Error('Please sign in to switch modes')
+  }
+
+  const currentRoles = Array.isArray(current.roles) && current.roles.length > 0
+    ? current.roles
+    : [current.role || 'customer']
+
+  if (!currentRoles.includes(targetMode)) {
+    // Acquire the role via POST /auth/add-role first
+    await api.addRole(targetMode)
+  }
+
+  const data = await api.switchMode(targetMode)
+  if (data.accessToken) {
+    api.setToken(data.accessToken)
+  }
+
+  const updatedUser = mapUser(data.user || { ...current, role: targetMode, activeMode: targetMode })
+  store.session = { userId: updatedUser.id, role: targetMode }
+  store.users = store.users.map((u) => (String(u._id || u.id) === String(updatedUser.id) ? updatedUser : u))
+  if (!store.users.some((u) => String(u._id || u.id) === String(updatedUser.id))) {
+    store.users = [updatedUser]
+  }
+
+  // Re-hydrate orders and state for the new role view
+  store.hydrated = false
+  store.hydrateFailed = false
+  emit()
+  await hydrate()
+  return updatedUser
+}
+
+export async function addUserRole(role) {
+  const data = await api.addRole(role)
+  const updatedUser = mapUser(data.user)
+  store.users = store.users.map((u) => (String(u._id || u.id) === String(updatedUser.id) ? updatedUser : u))
+  emit()
+  return updatedUser
 }
 
 export function setTheme(newTheme) {
@@ -478,7 +663,7 @@ export function signOut() {
   api.logout(); 
   disconnectSocket()
   clearSessionFlags()
-  store = { users: [], deliveries: [], scheduled: [], supportTickets: [], session: null, hydrated: false, loading: false, hydrateFailed: false, theme: store.theme }; 
+  store = { users: [], deliveries: [], scheduled: [], supportTickets: [], session: null, hydrated: false, loading: false, hydrateFailed: false, theme: store.theme, pendingPickup: store.pendingPickup, pendingDropoff: store.pendingDropoff }; 
   localStorage.removeItem('swifty_session')
   emit()
 }
@@ -544,6 +729,12 @@ export async function createDelivery(input) {
       note: input.note,
       guestEmail: input.guestEmail,
       guestPhone: input.guestPhone,
+      guestInfo: {
+        guestId: customerId,
+        name: input.name || input.pickup?.contactName || session?.name || 'Guest Customer',
+        phone: input.guestPhone || session?.phone || '',
+        email: input.guestEmail || session?.email || '',
+      },
     })
     if (!data.delivery) throw new Error('Unable to create your delivery. Please try again.')
 
@@ -598,6 +789,12 @@ export async function createRide(input) {
       customPrice: input.customPrice,
       email: input.guestEmail,
       phone: input.guestPhone,
+      guestInfo: {
+        guestId: customerId,
+        name: input.name || input.pickup?.contactName || session?.name || 'Guest Customer',
+        phone: input.guestPhone || session?.phone || '',
+        email: input.guestEmail || session?.email || '',
+      },
     })
     if (!data.ride) throw new Error('Unable to create your ride. Please try again.')
 
@@ -743,4 +940,47 @@ if (typeof window !== 'undefined') {
     signOut()
     toast.error(e.detail?.message || 'Session expired. Please sign in again.', { id: 'session-expired' })
   })
+}
+
+
+
+// === [PATCH: PERSISTENT ROUTE DRAFT & ROLE SWITCHING HELPERS] ===
+const SWIFT_ROUTE_DRAFT_KEY = 'swift_route_draft_v1';
+
+export function saveRouteDraft(draft = {}) {
+  try {
+    const prev = getRouteDraft();
+    const next = {
+      ...prev,
+      ...draft,
+      pickup: draft.pickup !== undefined ? draft.pickup : prev.pickup,
+      dropoff: draft.dropoff !== undefined ? draft.dropoff : prev.dropoff,
+      updatedAt: Date.now(),
+    };
+    sessionStorage.setItem(SWIFT_ROUTE_DRAFT_KEY, JSON.stringify(next));
+    localStorage.setItem(SWIFT_ROUTE_DRAFT_KEY, JSON.stringify(next));
+    window.dispatchEvent(new CustomEvent('route-draft-changed', { detail: next }));
+    return next;
+  } catch {
+    return draft;
+  }
+}
+
+export function getRouteDraft() {
+  try {
+    const raw = sessionStorage.getItem(SWIFT_ROUTE_DRAFT_KEY) || localStorage.getItem(SWIFT_ROUTE_DRAFT_KEY);
+    return raw ? JSON.parse(raw) : { pickup: null, dropoff: null, serviceType: 'ride' };
+  } catch {
+    return { pickup: null, dropoff: null, serviceType: 'ride' };
+  }
+}
+
+export function clearRouteDraft() {
+  sessionStorage.removeItem(SWIFT_ROUTE_DRAFT_KEY);
+  localStorage.removeItem(SWIFT_ROUTE_DRAFT_KEY);
+}
+
+export function canSwitchToDriver(user) {
+  if (!user || user.isGuest || user.role === 'guest') return false;
+  return true;
 }

@@ -1,13 +1,13 @@
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { Phone, X, CheckCircle, ArrowLeft, ClipboardList, UserCheck, Package, Truck, Copy, MapPinned, LoaderCircle, MapPin, Search } from 'lucide-react'
+import { Phone, Mail, X, CheckCircle, ArrowLeft, ClipboardList, UserCheck, Package, Truck, Copy, MapPinned, LoaderCircle, MapPin, Search } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { DeliveryMap } from '@/components/delivery-map'
 import { MobileDrawer } from '@/components/mobile-drawer'
 import { TripCard } from '@/components/trip-card'
 import { ChatPanel, ChatLauncher, useChatThread, ChatMessageList, ChatComposer } from '@/components/chat-panel'
 // Trip tracking is publicly viewable by code; only the "my trips" list requires sign-in.
-import { useStore, useCurrentUser, updateDeliveryStatus, confirmOrder, STATUS_LABEL } from '@/lib/api-store'
+import { useStore, useCurrentUser, updateDeliveryStatus, confirmOrder, STATUS_LABEL, upsertDelivery, mapOrder } from '@/lib/api-store'
 import { getErrorMessage, getPublicTracking } from '@/services/api'
 import { getSocket } from '@/lib/socket'
 import { Skeleton, SkeletonCard, SkeletonMap, SkeletonListItem } from '@/components/ui/skeleton'
@@ -98,12 +98,59 @@ export default function Track() {
   // the customer's confirmation — this is what unlocks "Start trip" on the
   // rider's side (server-enforced; see rider.services.js).
   useEffect(() => {
-    if (!user || !deliveryView) return
+    if (!deliveryView) return
     if (!deliveryView.riderName || deliveryView.customerConfirmed) return
     if (confirmedRef.current.has(deliveryView.id)) return
     confirmedRef.current.add(deliveryView.id)
     confirmOrder(deliveryView.id).catch(() => confirmedRef.current.delete(deliveryView.id))
-  }, [user, deliveryView?.id, deliveryView?.riderName, deliveryView?.customerConfirmed])
+  }, [deliveryView?.id, deliveryView?.riderName, deliveryView?.customerConfirmed])
+
+  // Subscribe to real-time socket updates for this order and guest room
+  useEffect(() => {
+    const socket = getSocket()
+    if (!socket) return
+
+    const targetOrderId = deliveryView?.id || deliveryId || id
+    const targetGuestId = deliveryView?.guestInfo?.guestId || deliveryView?.guestId
+
+    if (targetOrderId) {
+      socket.emit('join:order', targetOrderId)
+    }
+    if (targetGuestId) {
+      socket.emit('join:guest', targetGuestId)
+    }
+
+    const handleUpdate = (updatedOrder) => {
+      if (!updatedOrder) return
+      const updatedId = updatedOrder._id || updatedOrder.id
+      const updatedTracking = updatedOrder.trackingId
+
+      if (
+        (targetOrderId && String(updatedId) === String(targetOrderId)) ||
+        (id && (String(updatedId) === String(id) || String(updatedTracking) === String(id)))
+      ) {
+        const mapped = mapOrder(updatedOrder)
+        upsertDelivery(mapped)
+        setPublicDelivery(mapped)
+      }
+    }
+
+    socket.on('order:update', handleUpdate)
+    socket.on('job_status_updated', handleUpdate)
+    socket.on('delivery_updated', handleUpdate)
+
+    return () => {
+      if (targetOrderId) {
+        socket.emit('leave:order', targetOrderId)
+      }
+      if (targetGuestId) {
+        socket.emit('leave:guest', targetGuestId)
+      }
+      socket.off('order:update', handleUpdate)
+      socket.off('job_status_updated', handleUpdate)
+      socket.off('delivery_updated', handleUpdate)
+    }
+  }, [deliveryView?.id, deliveryId, id, deliveryView?.guestInfo?.guestId, deliveryView?.guestId])
 
   // Show an unread dot on the chat launcher when a message arrives while
   // the panel is closed.
@@ -369,7 +416,16 @@ if (!effectiveDelivery)
     { key: 'in_transit', label: 'In transit', Icon: Truck },
     { key: 'delivered', label: 'Delivered', Icon: CheckCircle },
   ]
-  const currentIdx = steps.findIndex((s) => s.key === deliveryView.status)
+  const STATUS_STEP_INDEX = {
+    pending: 0,
+    accepted: 1,
+    arrived_at_pickup: 1,
+    picked_up: 2,
+    in_transit: 3,
+    arrived_at_dropoff: 3,
+    delivered: 4,
+  }
+  const currentIdx = STATUS_STEP_INDEX[deliveryView.status] ?? steps.findIndex((s) => s.key === deliveryView.status)
 
   async function handleCancel() {
     setErrorMessage('')
@@ -416,6 +472,29 @@ if (!effectiveDelivery)
   ) : null
 
   function DetailPanel() {
+    const isGuest = Boolean(deliveryView.isGuestOrder || deliveryView.guestInfo || !deliveryView.customerId || String(deliveryView.customerId).startsWith('guest-'))
+    const guestName =
+      deliveryView.guestInfo?.name ||
+      deliveryView.customerProfile?.name ||
+      deliveryView.customer?.name ||
+      deliveryView.customerName ||
+      deliveryView.pickup?.contactName ||
+      (isGuest ? 'Guest Customer' : 'Customer')
+    const guestPhone =
+      deliveryView.guestInfo?.phone ||
+      deliveryView.customerProfile?.phone ||
+      deliveryView.customer?.phone ||
+      deliveryView.customerPhone ||
+      deliveryView.pickup?.contactPhone ||
+      ''
+    const guestEmail =
+      deliveryView.guestInfo?.email ||
+      deliveryView.customerProfile?.email ||
+      deliveryView.customer?.email ||
+      deliveryView.customerEmail ||
+      deliveryView.guestEmail ||
+      ''
+
     return (
       <div className='flex flex-col gap-3 ' >
         {/* Status card */}
@@ -433,15 +512,6 @@ if (!effectiveDelivery)
                       {canContact && (
               <div className="flex items-center gap-2">
                 <ChatLauncher hasUnread={chatUnread} onClick={() => { setChatOpen(true); setChatUnread(false) }} />
-                {/* {deliveryView.rider?.phone && (
-                  <a
-                    href={`tel:${deliveryView.rider.phone}`}
-                    className="flex items-center justify-center size-10 rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
-                    title="Call rider"
-                  >
-
-                  </a>
-                )} */}
               </div>
             )}
           </div>
@@ -455,16 +525,14 @@ if (!effectiveDelivery)
               {steps.map((s, i) => {
                 const done = i <= currentIdx
                 const isCurrent = i === currentIdx && !isDelivered
-                const timestamp = deliveryView.statusTimestamps?.[s.key]
+                const timestamp = deliveryView.statusTimestamps?.[s.key] || deliveryView.timeline?.find((t) => t.status === s.key)?.timestamp
                 const { Icon } = s
                 return (
                   <li key={s.key} className="flex items-start gap-3">
                     <span
                       className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors ${
                         done
-                          ? isDelivered
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-emerald-600 text-white'
+                          ? 'bg-emerald-600 text-white'
                           : 'bg-slate-200 text-slate-400'
                       } ${isCurrent ? 'ring-4 ring-emerald-600/20' : ''}`}
                     >
@@ -484,6 +552,48 @@ if (!effectiveDelivery)
           {isTerminated && (
             <p className="mt-4 text-center text-red-500 font-semibold">This ride was terminated - no driver was assigned or the driver cancelled</p>
           )}
+        </div>
+
+        {/* Customer / Guest card */}
+        <div className="rounded-2xl bg-gray-100 p-6 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+              {isGuest ? 'Guest Booking' : 'Customer Details'}
+            </p>
+            {isGuest ? (
+              <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800">
+                Guest Order
+              </span>
+            ) : (
+              <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+                Verified
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3.5">
+            <div className="size-10 rounded-xl bg-slate-200 flex items-center justify-center font-bold text-slate-700">
+              {(guestName || 'G').charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-slate-900 truncate">{guestName}</p>
+              {guestPhone && (
+                <p className="text-xs text-slate-500 truncate flex items-center gap-1.5 mt-0.5">
+                  <Phone className="h-3 w-3 text-emerald-600 shrink-0" />
+                  <a href={`tel:${guestPhone}`} className="hover:text-emerald-600 hover:underline">
+                    {guestPhone}
+                  </a>
+                </p>
+              )}
+              {guestEmail && (
+                <p className="text-xs text-slate-500 truncate flex items-center gap-1.5 mt-0.5">
+                  <Mail className="h-3 w-3 text-emerald-600 shrink-0" />
+                  <a href={`mailto:${guestEmail}`} className="hover:text-emerald-600 hover:underline truncate">
+                    {guestEmail}
+                  </a>
+                </p>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Courier card */}

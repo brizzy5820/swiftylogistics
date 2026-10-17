@@ -1,5 +1,5 @@
 import express from "express";
-import { register, login, me, updatePassword, socialLogin } from "../controllers/auth.controller.js";
+import { register, login, me, updatePassword, socialLogin, forgotPassword, resetPassword, switchMode, addRole } from "../controllers/auth.controller.js";
 import validate from "../middleware/validate.js";
 import { protect } from "../middleware/authMIddleware.js";
 import { registerSchema, loginSchema, changePasswordSchema } from "../validators/auth.validator.js";
@@ -21,6 +21,14 @@ router.post(
   "/social",
   asyncHandler(socialLogin)
 );
+router.post(
+  "/forgot-password",
+  asyncHandler(forgotPassword)
+);
+router.post(
+  "/reset-password",
+  asyncHandler(resetPassword)
+);
 router.get(
   "/me",
   protect,
@@ -31,6 +39,16 @@ router.patch(
   protect,
   validate(changePasswordSchema),
   asyncHandler(updatePassword)
+);
+router.patch(
+  "/mode",
+  protect,
+  asyncHandler(switchMode)
+);
+router.post(
+  "/add-role",
+  protect,
+  asyncHandler(addRole)
 );
 
 export default router;

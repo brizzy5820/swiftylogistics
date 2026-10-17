@@ -17,31 +17,76 @@ export const initSocket = (httpServer) => {
     },
   });
 
-  // Authenticate every handshake (runs again on each reconnect). An already
-  // open socket keeps working past the token's 15-min expiry; only a reconnect
-  // after expiry fails, which the client treats as "realtime lost, fall back
-  // to REST".
+  // Authenticate handshake if token is present; allow anonymous/guest customers
+  // to connect so they can track orders in real time.
   io.use((socket, next) => {
     try {
       const token = socket.handshake.auth?.token || socket.handshake.query?.token;
-      if (!token) return next(new Error("unauthorized"));
-      const decoded = verifyAccessToken(token);
-      socket.user = { id: String(decoded.sub), role: decoded.role };
+      if (token) {
+        try {
+          const decoded = verifyAccessToken(token);
+          socket.user = { id: String(decoded.sub), role: decoded.role };
+          return next();
+        } catch {
+          // Token expired or invalid — fallback to guest if guestId provided
+          const guestId = socket.handshake.auth?.guestId || socket.handshake.query?.guestId;
+          socket.guestId = guestId ? String(guestId) : null;
+          return next();
+        }
+      }
+
+      // Guest / unauthenticated connection
+      const guestId = socket.handshake.auth?.guestId || socket.handshake.query?.guestId;
+      socket.guestId = guestId ? String(guestId) : null;
       return next();
     } catch {
-      return next(new Error("unauthorized"));
+      return next();
     }
   });
 
   io.on("connection", (socket) => {
-    const { id, role } = socket.user;
-    socket.join(`user:${id}`);
-    if (role) socket.join(`role:${role}`);
+    if (socket.user?.id) {
+      socket.join(`user:${socket.user.id}`);
+      socket.join(`user_${socket.user.id}`);
+    }
+    if (socket.user?.role) {
+      socket.join(`role:${socket.user.role}`);
+    }
+    if (socket.guestId) {
+      socket.join(`guest-${socket.guestId}`);
+      socket.join(`guest_${socket.guestId}`);
+    }
 
-    // Chat between a customer and the rider assigned to their order. Only
-    // the two participants on that specific order can send/receive — every
-    // message is validated against the DB record, never trusted from the
-    // payload alone.
+    // Explicit room subscription events
+    socket.on("join:order", (orderId) => {
+      if (orderId) {
+        socket.join(`order-${orderId}`);
+        socket.join(`order_${orderId}`);
+      }
+    });
+
+    socket.on("leave:order", (orderId) => {
+      if (orderId) {
+        socket.leave(`order-${orderId}`);
+        socket.leave(`order_${orderId}`);
+      }
+    });
+
+    socket.on("join:guest", (guestId) => {
+      if (guestId) {
+        socket.join(`guest-${guestId}`);
+        socket.join(`guest_${guestId}`);
+      }
+    });
+
+    socket.on("leave:guest", (guestId) => {
+      if (guestId) {
+        socket.leave(`guest-${guestId}`);
+        socket.leave(`guest_${guestId}`);
+      }
+    });
+
+    // Chat between a customer (registered or guest) and the rider assigned to their order.
     socket.on("chat:send", async ({ orderId, text } = {}, ack) => {
       const reply = typeof ack === "function" ? ack : () => {};
       try {
@@ -51,25 +96,50 @@ export const initSocket = (httpServer) => {
         const order = await Delivery.findById(orderId);
         if (!order) return reply({ ok: false, error: "Order not found" });
 
-        const isCustomer = String(order.customer) === id;
-        const isRider = order.rider && String(order.rider) === id;
-        if (!isCustomer && !isRider) return reply({ ok: false, error: "You are not part of this order" });
+        const userId = socket.user?.id;
+        const isCustomer = userId && String(order.customer) === userId;
+        const isRider = order.rider && userId && String(order.rider) === userId;
+        const isGuestCustomer = !order.customer && (
+          socket.guestId === order.guestInfo?.guestId ||
+          !socket.user?.id
+        );
+
+        if (!isCustomer && !isRider && !isGuestCustomer) {
+          return reply({ ok: false, error: "You are not part of this order" });
+        }
         if (!order.rider) return reply({ ok: false, error: "No rider assigned yet" });
         if (["delivered", "cancelled"].includes(order.status)) return reply({ ok: false, error: "This order has ended" });
 
+        const senderRole = isRider ? "rider" : "customer";
+        const senderId = userId || order.guestInfo?.guestId || "guest";
+
         const message = {
-          sender: id,
-          senderRole: isRider ? "rider" : "customer",
+          sender: userId || order.rider, // ObjectId for schema if present
+          senderRole,
           text: trimmed,
           createdAt: new Date(),
         };
+        if (!order.messages) order.messages = [];
         order.messages.push(message);
         await order.save();
 
         const saved = order.messages[order.messages.length - 1];
-        const payload = { orderId: String(order._id), ...saved.toObject() };
+        const payload = {
+          orderId: String(order._id),
+          sender: senderId,
+          senderRole,
+          text: trimmed,
+          createdAt: saved.createdAt || new Date(),
+        };
 
-        io.to(`user:${String(order.customer)}`).to(`user:${String(order.rider)}`).emit("chat:message", payload);
+        // Emit to rider user room, order rooms, and guest room
+        if (order.rider) io.to(`user:${String(order.rider)}`).to(`user_${String(order.rider)}`).emit("chat:message", payload);
+        if (order.customer) io.to(`user:${String(order.customer)}`).to(`user_${String(order.customer)}`).emit("chat:message", payload);
+        io.to(`order-${String(order._id)}`).to(`order_${String(order._id)}`).emit("chat:message", payload);
+        if (order.guestInfo?.guestId) {
+          io.to(`guest-${order.guestInfo.guestId}`).to(`guest_${order.guestInfo.guestId}`).emit("chat:message", payload);
+        }
+
         reply({ ok: true, message: payload });
       } catch (error) {
         reply({ ok: false, error: "Unable to send message" });
@@ -92,12 +162,21 @@ const orderRooms = (order, extraUserIds = []) => {
   const rooms = new Set();
   const customerId = idOf(order?.customer ?? order?.customerId);
   const riderId = idOf(order?.rider ?? order?.riderId);
-  if (customerId) rooms.add(`user:${customerId}`);
-  if (riderId) rooms.add(`user:${riderId}`);
+  if (customerId) {
+    rooms.add(`user:${customerId}`);
+    rooms.add(`user_${customerId}`);
+  }
+  if (riderId) {
+    rooms.add(`user:${riderId}`);
+    rooms.add(`user_${riderId}`);
+  }
   rooms.add("role:admin");
   extraUserIds.forEach((uid) => {
     const clean = idOf(uid);
-    if (clean) rooms.add(`user:${clean}`);
+    if (clean) {
+      rooms.add(`user:${clean}`);
+      rooms.add(`user_${clean}`);
+    }
   });
   return [...rooms];
 };
@@ -105,7 +184,7 @@ const orderRooms = (order, extraUserIds = []) => {
 export const emitToUser = (userId, event, payload) => {
   const clean = idOf(userId);
   if (!io || !clean) return;
-  io.to(`user:${clean}`).emit(event, payload);
+  io.to(`user:${clean}`).to(`user_${clean}`).emit(event, payload);
 };
 
 export const emitToRole = (role, event, payload) => {
@@ -114,25 +193,54 @@ export const emitToRole = (role, event, payload) => {
 };
 
 /**
- * General "this order changed" — reaches the customer, the assigned rider,
- * every admin, plus any extraUserIds (used to tell a *previous* rider to drop
- * an order that was reassigned away from them). Clients upsert idempotently;
- * this event never triggers a toast.
+ * General "this order changed" — reaches the order room, guest room,
+ * the customer, the assigned rider, every admin, plus any extraUserIds.
  */
 export const emitOrderUpdate = (order, extraUserIds = []) => {
   if (!io || !order) return;
-  io.to(orderRooms(order, extraUserIds)).emit("order:update", order);
+  const raw = typeof order.toObject === "function" ? order.toObject({ virtuals: true }) : order;
+  const orderId = idOf(raw._id || raw.id);
+  const rooms = new Set(orderRooms(raw, extraUserIds));
+
+  if (orderId) {
+    rooms.add(`order-${orderId}`);
+    rooms.add(`order_${orderId}`);
+  }
+
+  const guestId = raw.guestInfo?.guestId || raw.guestId;
+  if (guestId) {
+    rooms.add(`guest-${guestId}`);
+    rooms.add(`guest_${guestId}`);
+  }
+
+  const targetRooms = [...rooms];
+  io.to(targetRooms).emit("order:update", raw);
+  io.to(targetRooms).emit("job_status_updated", raw);
+  io.to(targetRooms).emit("delivery_updated", raw);
+};
+
+/**
+ * Emits an update directly to a guest session room.
+ */
+export const emitGuestUpdate = (guestId, data) => {
+  if (!io || !guestId) return;
+  const raw = typeof data?.toObject === "function" ? data.toObject({ virtuals: true }) : data;
+  io.to(`guest-${guestId}`).to(`guest_${guestId}`).emit("order:update", raw);
+  io.to(`guest-${guestId}`).to(`guest_${guestId}`).emit("job_status_updated", raw);
+  io.to(`guest-${guestId}`).to(`guest_${guestId}`).emit("delivery_updated", raw);
 };
 
 /** A pending, unassigned job — offered to every rider (no toast). */
 export const emitJobAvailable = (order) => {
   if (!io || !order) return;
-  io.to("role:rider").emit("job:new", order);
+  const raw = typeof order.toObject === "function" ? order.toObject({ virtuals: true }) : order;
+  io.to("role:rider").emit("job:new", raw);
 };
 
-/** A job was assigned to a specific rider — the only event that toasts green. */
+/** A job was assigned to a specific rider. */
 export const emitJobAssigned = (order) => {
   const riderId = idOf(order?.rider ?? order?.riderId);
   if (!io || !riderId) return;
-  io.to(`user:${riderId}`).emit("job:assigned", order);
+  const raw = typeof order.toObject === "function" ? order.toObject({ virtuals: true }) : order;
+  io.to(`user:${riderId}`).to(`user_${riderId}`).emit("job:assigned", raw);
 };

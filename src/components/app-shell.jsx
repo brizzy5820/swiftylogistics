@@ -11,11 +11,8 @@ import {
   PackagePlus,
   User,
   Wallet,
-  Moon,
-  Sun,
 } from 'lucide-react'
 import { useCurrentUser, signOut, useStore, getGuestUser, getGuestActivities } from '../lib/api-store'
-import { useTheme } from './theme-provider'
 import { ShimmerImage } from './shimmer-image'
 
 const CUSTOMER_LINKS = [
@@ -61,7 +58,6 @@ export function AppShell({ children, hideMobileHeader = false }) {
   const scheduled = useStore((s) => (session ? (s.scheduled ?? []).filter((sc) => sc.customerId === session.userId) : []))
   const unread = useMemo(() => activeOrders.filter((d) => ['pending', 'in_transit'].includes(d.status)).length, [activeOrders])
   const scheduledCount = scheduled.length
-  const { theme, toggleTheme } = useTheme()
 
   function logout() { signOut(); navigate('/') }
 
@@ -87,14 +83,6 @@ export function AppShell({ children, hideMobileHeader = false }) {
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
-              onClick={toggleTheme}
-              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              className="rounded-xl p-2.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition"
-            >
-              {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-            </button>
             <Link
               to={role === "rider" ? "/rider/notifications" : "/customer/notifications"}
               className="relative rounded-xl p-2.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { BrandLoader } from '@/components/brand-loader'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ArrowLeft, Briefcase, CheckCircle2, Clock3, Hourglass, LoaderCircle, MapPin, PackageCheck, User, X } from 'lucide-react'
+import { ArrowLeft, Briefcase, CheckCircle2, Clock3, Hourglass, LoaderCircle, Mail, MapPin, PackageCheck, Phone, User, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { AppShell } from '@/components/app-shell'
 import { DeliveryMap } from '@/components/delivery-map'
@@ -16,9 +16,12 @@ import { useSimulatedCourierPosition } from '@/lib/use-simulated-courier'
 import { Skeleton, SkeletonCard } from '@/components/ui/skeleton'
 
 const NEXT = {
+  pending: { next: 'accepted', label: 'Accept job' },
   accepted: { next: 'picked_up', label: 'Mark as picked up' },
+  arrived_at_pickup: { next: 'picked_up', label: 'Mark as picked up' },
   picked_up: { next: 'in_transit', label: 'Start trip' },
   in_transit: { next: 'delivered', label: 'Mark delivered' },
+  arrived_at_dropoff: { next: 'delivered', label: 'Mark delivered' },
 }
 
 const TABS = [
@@ -273,6 +276,28 @@ function RiderJobView() {
     )
   }
 
+  const isGuestOrder = Boolean(delivery.isGuestOrder || !delivery.customer || delivery.guestInfo)
+  const customerName =
+    delivery.customerProfile?.name ||
+    delivery.customer?.name ||
+    delivery.guestInfo?.name ||
+    delivery.customerName ||
+    delivery.pickup?.contactName ||
+    (isGuestOrder ? 'Guest Customer' : 'Customer')
+  const customerPhone =
+    delivery.customerProfile?.phone ||
+    delivery.customer?.phone ||
+    delivery.guestInfo?.phone ||
+    delivery.customerPhone ||
+    delivery.pickup?.contactPhone ||
+    ''
+  const customerEmail =
+    delivery.customerProfile?.email ||
+    delivery.customer?.email ||
+    delivery.guestInfo?.email ||
+    delivery.customerEmail ||
+    ''
+
   const nextStep = NEXT[delivery.status]
   // "Start trip" (picked_up -> in_transit) waits on the customer confirming
   // from their track page. The server enforces this too (see
@@ -280,11 +305,7 @@ function RiderJobView() {
   // instead of letting the rider tap it and get a rejected request.
   const waitingOnCustomer = delivery.status === 'picked_up' && delivery.type === 'ride' && !delivery.customerConfirmed
   const startTripBlocked = nextStep?.next === 'in_transit' && waitingOnCustomer
-  // "Mark delivered" (in_transit -> delivered) waits for the simulated
-  // drive to actually reach the dropoff — the same motion driving the car
-  // on the map — so the button can't fire before the car has arrived.
- 
-  const deliveryBlocked = nextStep?.next === 'delivered' && !hasArrived
+  const enRouteNotice = nextStep?.next === 'delivered' && !hasArrived
 
   const detailCards = (
     <>
@@ -299,10 +320,54 @@ function RiderJobView() {
           <JobDetail Icon={MapPin} label="Pickup" value={delivery.pickup.address} />
           <JobDetail Icon={MapPin} label="Dropoff" value={delivery.dropoff.address} />
           <JobDetail Icon={PackageCheck} label="Vehicle" value={delivery.rider?.plateNumber || delivery.plateNumber} />
-          <div className="flex items-center justify-between gap-3">
-            <JobDetail Icon={User} label="Customer" value={delivery.customerName} />
-            {['accepted', 'picked_up', 'in_transit'].includes(delivery.status) && (
-              <ChatLauncher hasUnread={chatUnread} onClick={() => { setChatOpen(true); setChatUnread(false) }} />
+
+          {/* Customer Card: clearly distinguishing guest vs registered customer with contact details */}
+          <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm">
+                  {customerName.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-slate-900">{customerName}</span>
+                    {isGuestOrder ? (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800">
+                        Guest
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+                        Registered
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500">{isGuestOrder ? 'Guest booking' : 'Registered user'}</p>
+                </div>
+              </div>
+              {['accepted', 'picked_up', 'in_transit'].includes(delivery.status) && (
+                <ChatLauncher hasUnread={chatUnread} onClick={() => { setChatOpen(true); setChatUnread(false) }} />
+              )}
+            </div>
+
+            {(customerPhone || customerEmail) && (
+              <div className="space-y-1.5 border-t border-slate-200/60 pt-2 text-xs">
+                {customerPhone && (
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Phone className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <a href={`tel:${customerPhone}`} className="hover:text-emerald-600 hover:underline font-medium">
+                      {customerPhone}
+                    </a>
+                  </div>
+                )}
+                {customerEmail && (
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Mail className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <a href={`mailto:${customerEmail}`} className="hover:text-emerald-600 hover:underline truncate">
+                      {customerEmail}
+                    </a>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -323,13 +388,13 @@ function RiderJobView() {
                 <Hourglass className="h-3.5 w-3.5 shrink-0" /> Waiting for the customer to confirm on their track page — this unlocks automatically.
               </p>
             )}
-            {deliveryBlocked && (
+            {enRouteNotice && (
               <p className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs font-semibold text-amber-700">
-                <Hourglass className="h-3.5 w-3.5 shrink-0" /> Still on the way — this unlocks the moment you arrive at the dropoff.
+                <Hourglass className="h-3.5 w-3.5 shrink-0" /> Courier is simulated en route — you can mark delivered when dropoff is complete.
               </p>
             )}
             <button
-              disabled={startTripBlocked || deliveryBlocked || actionBusy}
+              disabled={startTripBlocked || actionBusy}
               onClick={async () => {
                 setActionBusy(true)
                 try {

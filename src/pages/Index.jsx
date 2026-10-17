@@ -15,17 +15,15 @@ import {
   User,
   X,
 } from "lucide-react";
-import { useCurrentUser, getGuestSession, setGuestSession } from "../lib/api-store";
+import { useCurrentUser, getGuestSession, setGuestSession, setPendingPickup, setPendingDropoff, getPendingAddresses, saveRouteDraft, getRouteDraft } from "../lib/api-store";
 import { ShimmerImage } from "../components/shimmer-image";
 import { Link, useNavigate } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { Sheet, SheetContent, SheetHeader,SheetTrigger, SheetTitle } from "../components/ui/sheet";
 import { ServiceGrid } from "../components/marketing/ServiceGrid";
 import { Footer } from "../components/marketing/Footer";
 import { LocationField } from "../components/location-field";
 import { resolveAddressCoords } from "../lib/address-suggestions";
-
-
 function ProfileBar({ user, className = "" }) {
   const dashboardPath = user.role === "rider" ? "/rider" : "/customer";
   return (
@@ -86,6 +84,22 @@ function ProfileBar({ user, className = "" }) {
 
 export default function Index() {
   const navigate = useNavigate();
+  const pendingInitial = useMemo(() => getPendingAddresses(), []);
+  const initialDraft = useMemo(() => getRouteDraft(), []);
+
+  const [pickup, setPickup] = useState(() => {
+    return pendingInitial.pickup?.text || (typeof initialDraft.pickup === 'string' ? initialDraft.pickup : initialDraft.pickup?.address) || '';
+  });
+  const [dropoff, setDropoff] = useState(() => {
+    return pendingInitial.dropoff?.text || (typeof initialDraft.dropoff === 'string' ? initialDraft.dropoff : initialDraft.dropoff?.address) || '';
+  });
+  const [pickupCoords, setPickupCoords] = useState(() => {
+    return pendingInitial.pickup?.coords || (initialDraft.pickup?.lat ? { lat: initialDraft.pickup.lat, lng: initialDraft.pickup.lng } : null);
+  });
+  const [dropoffCoords, setDropoffCoords] = useState(() => {
+    return pendingInitial.dropoff?.coords || (initialDraft.dropoff?.lat ? { lat: initialDraft.dropoff.lat, lng: initialDraft.dropoff.lng } : null);
+  });
+
   const { user } = useCurrentUser();
   // A guest has no session but is already browsing as one once they tap
   // "Proceed as guest" on the auth form.
@@ -96,12 +110,27 @@ export default function Index() {
   useEffect(() => scrollY.on("change", (value) => setScrolled(value > 40)), [scrollY]);
 
   const [mode, setMode] = useState("ride");
-  const [pickup, setPickup] = useState("");
-  const [dropoff, setDropoff] = useState("");
-  const [pickupCoords, setPickupCoords] = useState(null);
-  const [dropoffCoords, setDropoffCoords] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
   const [trackCode, setTrackCode] = useState("");
+
+  // Keep pending addresses synchronized as user types or picks location
+  useEffect(() => {
+    if (!pickup && !pickupCoords) return;
+    const pc = pickupCoords ?? resolveAddressCoords(pickup, null);
+    setPendingPickup({ text: pickup, coords: pc });
+    saveRouteDraft({ pickup: { address: pickup, ...(pc || {}) } });
+  }, [pickup, pickupCoords]);
+
+  useEffect(() => {
+    if (!dropoff && !dropoffCoords) return;
+    const dc = dropoffCoords ?? resolveAddressCoords(dropoff, null);
+    setPendingDropoff({ text: dropoff, coords: dc });
+    saveRouteDraft({ dropoff: { address: dropoff, ...(dc || {}) } });
+  }, [dropoff, dropoffCoords]);
+
+  const handleProceedToRide = (e) => {
+    handleRide(e);
+  };
 
   function proceedAsGuest() {
     if (!getGuestSession()) setGuestSession(null, null)
@@ -110,23 +139,33 @@ export default function Index() {
   }
 
   function handleRide(e) {
-    e.preventDefault();
+    e?.preventDefault();
     // Resolve the picked addresses to coordinates synchronously, so the ride
     // page receives real pickup/dropoff pins even when the field's own async
     // geocode has not landed yet (or the device is offline).
     const pc = pickupCoords ?? resolveAddressCoords(pickup, null);
     const dc = dropoffCoords ?? resolveAddressCoords(dropoff, null);
+
+    // Persist pending addresses with text + coords
+    setPendingPickup({ text: pickup, coords: pc });
+    setPendingDropoff({ text: dropoff, coords: dc });
+    saveRouteDraft({
+      pickup: { address: pickup, ...(pc || {}) },
+      dropoff: { address: dropoff, ...(dc || {}) },
+      serviceType: 'ride',
+    });
+
     if (!user) {
       // Already a guest on this device — straight to the ride flow, where the
       // contact form appears after a ride is picked.
       if (isGuest) {
-        navigate({ pathname: '/customer/ride', state: { pickup, dropoff, pickupCoords: pc, dropoffCoords: dc } });
+        navigate('/customer/ride', { state: { pickup, dropoff, pickupCoords: pc, dropoffCoords: dc } });
         return;
       }
       navigate("/auth", { state: { from: "/customer/ride", intent: { pickup, dropoff, pickupCoords: pc, dropoffCoords: dc, role: "customer" } } });
       return;
     }
-    navigate({ pathname: '/customer/ride', state: { pickup, dropoff, pickupCoords: pc, dropoffCoords: dc } });
+    navigate('/customer/ride', { state: { pickup, dropoff, pickupCoords: pc, dropoffCoords: dc } });
   }
 
   function handleTrack(e) {

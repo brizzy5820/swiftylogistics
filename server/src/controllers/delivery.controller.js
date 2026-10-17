@@ -43,16 +43,21 @@ const getDeliveries = async (req, res) => {
 };
 
 const getDelivery = async (req, res) => {
-  const delivery =
-    await deliveryService.getDeliveryById(
-      req.user._id,
-      req.params.id
-    );
-
-  return res.status(200).json({
-    success: true,
-    delivery,
-  });
+  // Customers fetch their own deliveries; riders fetch deliveries assigned to them.
+  const userId = req.user._id;
+  const role = req.user.role;
+  let delivery;
+  if (role === 'rider') {
+    // Rider may access only if assigned.
+    delivery = await deliveryService.getDeliveryForRider(userId, req.params.id);
+  } else {
+    // Customer access
+    delivery = await deliveryService.getDeliveryById(userId, req.params.id);
+  }
+  if (!delivery) {
+    return res.status(404).json({ success: false, code: 'NOT_FOUND', message: 'Delivery not found' });
+  }
+  return res.status(200).json({ success: true, delivery });
 };
 
 const cancelDelivery = async (req, res) => {

@@ -125,6 +125,10 @@ export const login = (payload) => request('/auth/login', { method: 'POST', body:
 export const socialAuth = (payload) => request('/auth/social', { method: 'POST', body: JSON.stringify(payload) })
 export const getMe = () => request('/auth/me')
 export const changePassword = (password) => request('/auth/password', { method: 'PATCH', body: JSON.stringify({ password }) })
+export const switchMode = (mode) => request('/auth/mode', { method: 'PATCH', body: JSON.stringify({ mode }) })
+export const addRole = (role) => request('/auth/add-role', { method: 'POST', body: JSON.stringify({ role }) })
+export const forgotPassword = (email) => request('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) })
+export const resetPassword = (payload) => request('/auth/reset-password', { method: 'POST', body: JSON.stringify(payload) })
 export const updateMe = (payload) => request('/users/me', { method: 'PATCH', body: JSON.stringify(payload) })
 export const logout = clearToken
 
@@ -160,6 +164,7 @@ export const getRiderJob = (id) => request(`/riders/jobs/${id}`)
 export const acceptRiderJob = (id) => request(`/riders/jobs/${id}/accept`, { method: 'PATCH' })
 export const updateRiderDeliveryStatus = (id, status) => request(`/riders/deliveries/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) })
 
+export const adminLogin = (payload) => request('/admin/login', { method: 'POST', body: JSON.stringify(payload) })
 export const getAdminDashboard = () => request('/admin/dashboard')
 export const getAdminUsers = (query = '') => request(`/admin/users${query ? `?${query}` : ''}`)
 export const getAdminUser = (id) => request(`/admin/users/${id}`)

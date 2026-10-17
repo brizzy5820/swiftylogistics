@@ -1,52 +1,78 @@
-import { useEffect, useState, createContext, useContext, useCallback } from 'react'
-import { useStore } from '../lib/api-store'
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 
-const ThemeContext = createContext({ theme: 'light', toggleTheme: () => {} })
+const ThemeProviderContext = createContext({
+  theme: 'light',
+  resolvedTheme: 'light',
+  isGuest: false,
+  setTheme: () => null,
+  toggleTheme: () => null,
+});
 
-export function useTheme() {
-  return useContext(ThemeContext)
+const STORAGE_KEYS = ['app_theme_pref', 'vite-ui-theme', 'swifty_theme'];
+
+function getIsGuestSession() {
+  if (typeof window === 'undefined') return false;
+  const isGuest =
+    sessionStorage.getItem('is_guest_session') === 'true' ||
+    sessionStorage.getItem('swifty_guest') === 'true' ||
+    localStorage.getItem('user_role') === 'guest' ||
+    (!localStorage.getItem('swifty_access_token') && !sessionStorage.getItem('swifty_access_token'));
+  return Boolean(isGuest);
 }
 
-export function ThemeProvider({ children }) {
-  const storeTheme = useStore((s) => s.theme)
-  const [theme, setTheme] = useState('light')
+export function ThemeProvider({
+  children,
+  ...props
+}) {
+  const theme = 'light';
+  const resolvedTheme = 'light';
+  const [isGuest, setIsGuest] = useState(getIsGuestSession);
 
-  // Initialize theme from localStorage or store on mount
   useEffect(() => {
-    const stored = localStorage.getItem('swifty_theme')
-    if (stored === 'dark' || stored === 'light') {
-      setTheme(stored)
-    } else if (storeTheme) {
-      setTheme(storeTheme)
-    } else if (typeof window !== 'undefined' && window.matchMedia) {
-      const dark = window.matchMedia('(prefers-color-scheme: dark)').matches
-      setTheme(dark ? 'dark' : 'light')
-    }
-  }, [storeTheme])
+    const checkGuest = () => setIsGuest(getIsGuestSession());
+    window.addEventListener('storage', checkGuest);
+    return () => window.removeEventListener('storage', checkGuest);
+  }, []);
 
-  // Apply theme to DOM
   useEffect(() => {
-    const root = document.documentElement
-    if (theme === 'dark') {
-      root.classList.add('dark')
-      root.style.colorScheme = 'dark'
-    } else {
-      root.classList.remove('dark')
-      root.style.colorScheme = 'light'
-    }
-    // Persist to localStorage immediately
-    localStorage.setItem('swifty_theme', theme)
-  }, [theme])
+    const root = window.document.documentElement;
+    root.classList.remove('dark');
+    root.classList.add('light');
+    root.setAttribute('data-theme', 'light');
+    root.style.colorScheme = 'light';
+    setIsGuest(getIsGuestSession());
+  }, []);
 
-  const toggleTheme = useCallback(() => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))
-  }, [])
+  const setTheme = useCallback(() => {
+    STORAGE_KEYS.forEach((key) => {
+      try {
+        localStorage.setItem(key, 'light');
+      } catch {}
+    });
+  }, []);
+
+  const toggleTheme = useCallback(() => setTheme('light'), [setTheme]);
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeProviderContext.Provider
+      {...props}
+      value={{
+        theme,
+        resolvedTheme,
+        isGuest,
+        setTheme,
+        toggleTheme,
+      }}
+    >
       {children}
-    </ThemeContext.Provider>
-  )
+    </ThemeProviderContext.Provider>
+  );
 }
 
-export default ThemeProvider
+export const useTheme = () => {
+  const context = useContext(ThemeProviderContext);
+  if (context === undefined) {
+    throw new Error('useTheme must be used within a ThemeProvider');
+  }
+  return context;
+};

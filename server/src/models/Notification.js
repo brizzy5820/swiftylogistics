@@ -6,7 +6,7 @@ const notificationSchema =
       user: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
-        required: true,
+        required: false,
       },
 
       type: {
@@ -22,18 +22,18 @@ const notificationSchema =
           "order_cancelled",
           "system",
         ],
-        required: true,
+        required: false,
       },
 
       title: {
         type: String,
-        required: true,
+        required: false,
         trim: true,
       },
 
       message: {
         type: String,
-        required: true,
+        required: false,
         trim: true,
       },
 

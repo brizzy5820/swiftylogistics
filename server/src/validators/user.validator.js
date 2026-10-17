@@ -24,8 +24,20 @@ const updateUserSchema = z
       .min(7, "Invalid phone number")
       .max(20, "Phone number is too long")
       .optional(),
+
+    themePreference: z.enum(["light", "dark", "system"]).optional(),
+
+    activeMode: z.enum(["customer", "rider"]).optional(),
+
+    // Explicitly forbid admin escalation for role and roles
+    role: z.enum(["customer", "rider"]).optional(),
+    roles: z.array(z.enum(["customer", "rider"])).optional(),
+
+    // Catch status or admin flags to strip them
+    isActive: z.any().optional(),
+    isAdmin: z.any().optional(),
   })
-  .strict();
+  .transform(({ role, roles, isActive, isAdmin, ...allowed }) => allowed);
 
 export {
   updateUserSchema,

@@ -21,8 +21,34 @@ import {
   assignRiderSchema,
   updateOrderStatusSchema,
 } from "../validators/admin.validator.js";
+import { loginSchema } from "../validators/auth.validator.js";
+import { loginUser } from "../services/auth.services.js";
 
 const router = express.Router();
+
+/*
+ * ADMIN LOGIN (Public)
+ */
+router.post(
+  "/login",
+  validate(loginSchema),
+  asyncHandler(async (req, res) => {
+    const { accessToken, user } = await loginUser(req.body);
+    if (user.role !== "admin" && user.activeMode !== "admin") {
+      return res.status(403).json({
+        success: false,
+        code: "FORBIDDEN",
+        message: "Access denied. Administrator privileges required.",
+      });
+    }
+    return res.status(200).json({
+      success: true,
+      message: "Admin login successful",
+      accessToken,
+      user,
+    });
+  })
+);
 
 /*
  * Everything inside this router requires:

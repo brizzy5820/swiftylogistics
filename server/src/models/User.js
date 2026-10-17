@@ -3,6 +3,11 @@ import { userCache, invalidateUser } from "../utils/cache.js";
 
 const userSchema = new mongoose.Schema(
   {
+  roles: { type: [String], default: ['customer', 'rider'] },
+  activeMode: { type: String, enum: ['customer', 'rider', 'admin'], default: 'customer' },
+  themePreference: { type: String, enum: ['light', 'dark', 'system'], default: 'system' },
+  resetPasswordToken: { type: String, select: false },
+  resetPasswordExpire: { type: Date, select: false },
     name: {
       type: String,
       required: true,

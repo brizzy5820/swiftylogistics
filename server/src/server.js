@@ -1,5 +1,10 @@
 import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 import http from "http";
 import mongoose from "mongoose";
@@ -23,6 +28,15 @@ const startServer = async () => {
   initSocket(server);
   // Run the scheduler on exactly one instance when horizontally scaled.
   if (process.env.RUN_SCHEDULER !== "false") startScheduler();
+
+  server.on("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`Port ${PORT} is already in use. Please stop the existing process or set a different PORT in .env`);
+    } else {
+      console.error("Server error:", err);
+    }
+    process.exit(1);
+  });
 
   server.listen(PORT, () => console.log(`Swifty API running on port ${PORT}`));
 

@@ -5,6 +5,7 @@ import { BrandLoader } from './components/brand-loader'
 import { Toaster } from './components/ui/sonner'
 import { GlobalChatNotifier } from './components/global-chat-notifier'
 import { ThemeProvider } from './components/theme-provider'
+import { AdminRoute } from './components/admin/AdminRoute'
 
 // Each page is its own chunk: the first paint only downloads what it needs.
 const loadIndex = () => import('./pages/Index')
@@ -154,13 +155,13 @@ export default function App() {
             <Route path="/rider/notifications" element={<RiderNotifications />} />
             <Route path="/rider/earnings" element={<RiderEarnings />} />
             <Route path="/rider/account" element={<RiderAccount />} />
-            <Route path="/admin" element={<AdminDashboard />} />
-            <Route path="/admin/customers" element={<AdminCustomers />} />
-            <Route path="/admin/riders" element={<AdminRiders />} />
-            <Route path="/admin/rides" element={<AdminRides />} />
-            <Route path="/admin/deliveries" element={<AdminDeliveries />} />
-            <Route path="/admin/support" element={<AdminSupport />} />
-            <Route path="/admin/account" element={<AdminAccountPage />} />
+            <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+            <Route path="/admin/customers" element={<AdminRoute><AdminCustomers /></AdminRoute>} />
+            <Route path="/admin/riders" element={<AdminRoute><AdminRiders /></AdminRoute>} />
+            <Route path="/admin/rides" element={<AdminRoute><AdminRides /></AdminRoute>} />
+            <Route path="/admin/deliveries" element={<AdminRoute><AdminDeliveries /></AdminRoute>} />
+            <Route path="/admin/support" element={<AdminRoute><AdminSupport /></AdminRoute>} />
+            <Route path="/admin/account" element={<AdminRoute><AdminAccountPage /></AdminRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           </Suspense>

@@ -1,5 +1,12 @@
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 import mongoose from "mongoose";
 import User from "../models/User.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -31,8 +38,13 @@ const reconcileUserIndexes = async () => {
 };
 
 const connectDB = async () => {
+  const uri = process.env.MONGO_URI;
+  if (!uri) {
+    console.error("MongoDB connection failed: MONGO_URI is missing from environment variables (.env).");
+    process.exit(1);
+  }
   try {
-    const connection = await mongoose.connect(process.env.MONGO_URI, {
+    const connection = await mongoose.connect(uri, {
       maxPoolSize: Number(process.env.MONGO_POOL_SIZE) || 100, // concurrent queries per instance
       minPoolSize: 10,
       serverSelectionTimeoutMS: 5000,

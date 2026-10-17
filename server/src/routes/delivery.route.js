@@ -3,6 +3,7 @@ import express from "express";
 import deliveryController from "../controllers/delivery.controller.js";
 import validate from "../middleware/validate.js";
 import { protect, protectOptional } from "../middleware/authMIddleware.js";
+import { guestOrderLimiter } from "../middleware/rateLimiter.js";
 import asyncHandler from "../utils/asyncHandler.js";
 
 import { createDeliverySchema } from "../validators/dellivery.validator.js";
@@ -16,6 +17,7 @@ const router = express.Router();
 router.post(
   "/",
   protectOptional,
+  guestOrderLimiter,
   validate(createDeliverySchema),
   asyncHandler(deliveryController.createDelivery)
 );

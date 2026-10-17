@@ -1,3 +1,4 @@
+import { RoleModeSwitchCard } from '@/components/shared/RoleAndOnboardingModal';
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { BrandLoader } from '@/components/brand-loader'
 import { useEffect, useRef, useState } from 'react'
@@ -152,6 +153,7 @@ export default function Account() {
           <div className="mb-6">
             <h1 className="font-display text-3xl font-bold tracking-tight text-slate-900">Account</h1>
             <p className="mt-2 text-sm text-slate-500">Profile, settings, help, and shipment history.</p>
+            <RoleModeSwitchCard currentMode="customer" isGuest={Boolean(accountUser?.isGuest)} />
           </div>
         )}
 
@@ -346,6 +348,7 @@ function ProfilePanel({ user, totalOrders, deliveredOrders, activeOrders, startE
 
   return (
     <div className="space-y-6">
+      <RoleModeSwitchCard currentMode="customer" isGuest={Boolean(user?.isGuest)} />
       <div className="flex items-center gap-4 rounded-2xl border border-slate-200 p-5">
         <div className="relative shrink-0">
           <div className="flex h-28 w-24 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
@@ -636,6 +639,10 @@ function GuestAccountPanel({ activities }) {
           >
          Log in
           </Link>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-slate-100">
+          <RoleModeSwitchCard currentMode="customer" isGuest={true} />
         </div>
       </div>
       </div>

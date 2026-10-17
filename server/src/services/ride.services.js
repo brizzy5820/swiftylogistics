@@ -3,7 +3,8 @@ import Delivery from "../models/Delivery.js";
 import Address from "../models/Address.js";
 import AppError from "../utils/AppError.js";
 import User from "../models/User.js";
-import { emitJobAvailable, emitJobAssigned, emitOrderUpdate } from "../socket.js";
+import notificationService from "./notification.service.js";
+import { emitJobAvailable, emitJobAssigned, emitOrderUpdate, emitGuestUpdate } from "../socket.js";
 
 const calculateDistance = (a, b) => {
   const R = 6371;
@@ -11,14 +12,12 @@ const calculateDistance = (a, b) => {
   const dLng = ((b.lng - a.lng) * Math.PI) / 180;
   const x = Math.sin(dLat / 2) ** 2 +
     Math.cos((a.lat * Math.PI) / 180) *
-    Math.cos((b.lat * Math.PI) / 180) *
-    Math.sin(dLng / 2) ** 2;
+      Math.cos((b.lat * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 };
 
-// Mirrors client/src/data/app-data.js RIDE_OPTIONS so the server can validate
-// (not blindly trust) a customPrice the client sends, and still compute a
-// sane fare when none is sent (scheduled rides created without the picker).
+// Mirrors client/src/data/app-data.js RIDE_OPTIONS
 const RIDE_PRICE_CONFIG = {
   economy: { pricePerKm: 150, minPrice: 1500, maxPrice: 3000 },
   comfort: { pricePerKm: 200, minPrice: 2200, maxPrice: 4500 },
@@ -33,10 +32,6 @@ const calculateFare = (distanceKm, rideType) => {
   return Math.round(Math.min(Math.max(raw, config.minPrice), config.maxPrice));
 };
 
-// If the client sent the price it showed on the selected ride-option card,
-// honour it — but clamp to that option's valid band so a tampered request
-// body still can't set an arbitrary price. This is the fix for rides being
-// created with a price that didn't match what the customer picked.
 const resolvePrice = (distanceKm, rideType, customPrice) => {
   if (typeof customPrice === "number" && Number.isFinite(customPrice) && customPrice > 0) {
     const config = priceConfigFor(rideType);
@@ -79,14 +74,42 @@ const createRide = async (userId, data, guestContact = null) => {
   const distanceKm = calculateDistance(pickup.coords, dropoff.coords);
   const initialStatus = scheduledFor ? "scheduled" : "pending";
   const trackingId = `RIDE-${crypto.randomBytes(5).toString("hex").toUpperCase()}`;
+  const farePrice = resolvePrice(distanceKm, data.rideType, data.customPrice);
+
+  const isGuest = !userId;
+  const guestInfo = (isGuest || guestContact) ? {
+    guestId: data.guestInfo?.guestId || data.guestId || `guest_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`,
+    name: data.guestInfo?.name || data.name || pickup.contactName || "Guest Customer",
+    phone: guestContact?.phone?.trim() || data.guestPhone || pickup.contactPhone || "",
+    email: guestContact?.email?.toLowerCase()?.trim() || data.guestEmail || "",
+  } : undefined;
 
   const rideData = {
-    customer: userId,
+    customer: userId || null,
+    isGuestOrder: isGuest,
+    guestInfo,
+    guestEmail: guestContact?.email?.toLowerCase()?.trim() || data.guestEmail?.toLowerCase()?.trim() || null,
+    guestPhone: guestContact?.phone?.trim() || data.guestPhone?.trim() || null,
     type: "ride",
-    pickup,
-    dropoff,
+    pickup: {
+      address: pickup.address,
+      coords: pickup.coords,
+      lat: pickup.coords.lat,
+      lng: pickup.coords.lng,
+      contactName: pickup.contactName || guestInfo?.name,
+      contactPhone: pickup.contactPhone || guestInfo?.phone,
+    },
+    dropoff: {
+      address: dropoff.address,
+      coords: dropoff.coords,
+      lat: dropoff.coords.lat,
+      lng: dropoff.coords.lng,
+      recipientName: dropoff.recipientName,
+      recipientPhone: dropoff.recipientPhone,
+    },
     rideType: data.rideType,
-    price: resolvePrice(distanceKm, data.rideType, data.customPrice),
+    price: farePrice,
+    fare: farePrice,
     paymentMethod: data.paymentMethod || "cash",
     distanceKm: Math.round(distanceKm * 10) / 10,
     etaMinutes: Math.max(5, Math.round(distanceKm * 4)),
@@ -96,50 +119,61 @@ const createRide = async (userId, data, guestContact = null) => {
     trackingId,
     courierPosition: scheduledFor ? null : pickup.coords,
     statusTimestamps: { [initialStatus]: new Date() },
+    timeline: [
+      {
+        status: initialStatus,
+        timestamp: new Date(),
+        note: scheduledFor ? "Ride scheduled" : "Ride requested",
+      },
+    ],
   };
-
-  // Guest contact info for anonymous riders
-  if (guestContact) {
-    rideData.guestEmail = guestContact.email?.toLowerCase()?.trim() || null
-    rideData.guestPhone = guestContact.phone?.trim() || null
-  }
 
   const ride = await Delivery.create(rideData);
 
-  // Let every online rider know a job just opened up (no toast — just a
-  // list refresh on their side).
   if (initialStatus === "pending") emitJobAvailable(ride);
 
   return ride;
 };
 
-const getUserRides = async (userId) => Delivery.find({ customer: userId, type: "ride" })
-  .populate("rider", "name phone vehicleType vehicleColor plateNumber rating")
-  .sort({ createdAt: -1 });
+const getUserRides = async (userId) => {
+  if (!userId) return [];
+  return Delivery.find({ customer: userId, type: "ride" })
+    .populate("rider", "name phone vehicleType vehicleColor plateNumber rating")
+    .sort({ createdAt: -1 });
+};
 
 const getRideById = async (userId, rideId) => {
-  const ride = await Delivery.findOne({ _id: rideId, customer: userId, type: "ride" })
-    .populate("rider", "name phone vehicleType vehicleColor plateNumber rating");
+  const query = userId ? { _id: rideId, customer: userId, type: "ride" } : { _id: rideId, type: "ride" };
+  const ride = await Delivery.findOne(query)
+    .populate("rider", "name phone vehicleType vehicleColor plateNumber rating")
+    .populate("customer", "name phone email avatar");
   if (!ride) throw new AppError("Ride not found", 404);
   return ride;
 };
 
 const cancelRide = async (userId, rideId) => {
-  const ride = await Delivery.findOne({ _id: rideId, customer: userId, type: "ride" });
+  const query = userId ? { _id: rideId, customer: userId, type: "ride" } : { _id: rideId, type: "ride" };
+  const ride = await Delivery.findOne(query);
   if (!ride) throw new AppError("Ride not found", 404);
   if (["delivered", "cancelled"].includes(ride.status)) throw new AppError("This ride can no longer be cancelled", 400);
   ride.status = "cancelled";
   ride.isScheduled = false;
   if (!ride.statusTimestamps) ride.statusTimestamps = new Map();
   ride.statusTimestamps.set("cancelled", new Date());
+  if (!ride.timeline) ride.timeline = [];
+  ride.timeline.push({ status: "cancelled", timestamp: new Date(), note: "Ride cancelled" });
   await ride.save();
   if (ride.rider) await User.findByIdAndUpdate(ride.rider, { isAvailable: true });
   emitOrderUpdate(ride);
+  if (ride.isGuestOrder && ride.guestInfo?.guestId) {
+    emitGuestUpdate(ride.guestInfo.guestId, ride);
+  }
   return ride;
 };
 
 const assignRide = async (userId, rideId) => {
-  const ride = await Delivery.findOne({ _id: rideId, customer: userId, type: "ride" });
+  const query = userId ? { _id: rideId, customer: userId, type: "ride" } : { _id: rideId, type: "ride" };
+  const ride = await Delivery.findOne(query);
   if (!ride) throw new AppError("Ride not found", 404);
   if (ride.rider) return ride.populate("rider", "name phone vehicleType vehicleColor plateNumber rating");
   if (ride.status !== "pending") throw new AppError("Only pending rides can be assigned", 400);
@@ -150,13 +184,39 @@ const assignRide = async (userId, rideId) => {
   ride.rider = rider._id;
   ride.riderName = rider.name;
   ride.status = "accepted";
+  if (!ride.statusTimestamps) ride.statusTimestamps = new Map();
   ride.statusTimestamps.set("accepted", new Date());
-  ride.courierPosition = ride.pickup.coords;
+  if (!ride.timeline) ride.timeline = [];
+  ride.timeline.push({ status: "accepted", timestamp: new Date(), note: `Accepted by ${rider.name}` });
+  if (ride.pickup?.coords) {
+    ride.courierPosition = ride.pickup.coords;
+  }
   await ride.save();
   await User.findByIdAndUpdate(rider._id, { isAvailable: false });
   await ride.populate("rider", "name phone vehicleType vehicleColor plateNumber rating");
+  if (ride.customer) {
+    await ride.populate("customer", "name phone email avatar");
+  }
+
+  // Guard notification
+  const customerId = ride.customer?._id || (typeof ride.customer === "string" ? ride.customer : null);
+  if (customerId) {
+    try {
+      await notificationService.createNotification({
+        userId: customerId,
+        type: "order_accepted",
+        title: "Ride Accepted",
+        message: `${rider.name} has accepted your ride.`,
+        deliveryId: ride._id,
+      });
+    } catch (_) {}
+  }
+
   emitOrderUpdate(ride);
   emitJobAssigned(ride);
+  if (ride.isGuestOrder && ride.guestInfo?.guestId) {
+    emitGuestUpdate(ride.guestInfo.guestId, ride);
+  }
   return ride;
 };
 

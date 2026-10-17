@@ -10,7 +10,7 @@ import { MobileDrawer } from '../../components/mobile-drawer'
 import { RiderSearchDrawer, SEARCH_COUNTDOWN_MS } from '../../components/rider-search-drawer'
 import { LocationField } from '../../components/location-field'
 import { useRequireAuth } from '../../lib/use-require-auth'
-import { assignAvailableRider, createRide, updateDeliveryStatus, useStore, emit, getStore } from '../../lib/api-store'
+import { assignAvailableRider, createRide, updateDeliveryStatus, useStore, emit, getStore, getPendingAddresses, clearPendingAddresses, saveRouteDraft, getRouteDraft } from '../../lib/api-store'
 import { getErrorMessage } from '../../services/api'
 import { RIDE_OPTIONS } from '../../data/app-data'
 import { fetchLagosSuggestions, resolveAddressCoords } from '../../lib/address-suggestions'
@@ -34,6 +34,19 @@ async function geocode(query) {
 }
 
 
+function extractText(val) {
+  if (!val) return ''
+  if (typeof val === 'string') return val
+  return val.text || val.address || val.label || ''
+}
+
+function extractCoords(val, fallback = null) {
+  if (!val) return fallback
+  if (val.coords && typeof val.coords.lat === 'number' && typeof val.coords.lng === 'number') return val.coords
+  if (typeof val.lat === 'number' && typeof val.lng === 'number') return { lat: val.lat, lng: val.lng }
+  return fallback
+}
+
 export default function Ride() {
   const user = useRequireAuth('customer')
   const navigate = useNavigate()
@@ -45,12 +58,40 @@ export default function Ride() {
   // empty inputs even though they typed them on the landing page.
   const navState = location.state || {}
   const intent = (navState.intent && typeof navState.intent === 'object') ? navState.intent : navState
-const [bidOpen, setBidOpen] = useState({})
+
+  const pendingInitial = useMemo(() => getPendingAddresses(), [])
+  const initialDraft = useMemo(() => getRouteDraft(), [])
+
+  const initialPickupText =
+    extractText(intent.pickup) ||
+    pendingInitial.pickup?.text ||
+    extractText(initialDraft.pickup) ||
+    ''
+  const initialPickupCoords =
+    intent.pickupCoords ||
+    extractCoords(intent.pickup) ||
+    pendingInitial.pickup?.coords ||
+    extractCoords(initialDraft.pickup) ||
+    null
+
+  const initialDropoffText =
+    extractText(intent.dropoff) ||
+    pendingInitial.dropoff?.text ||
+    extractText(initialDraft.dropoff) ||
+    ''
+  const initialDropoffCoords =
+    intent.dropoffCoords ||
+    extractCoords(intent.dropoff) ||
+    pendingInitial.dropoff?.coords ||
+    extractCoords(initialDraft.dropoff) ||
+    null
+
+  const [bidOpen, setBidOpen] = useState({})
   const [option, setOption] = useState(null)
-  const [pickup, setPickup] = useState(intent.pickup || '')
-  const [dropoff, setDropoff] = useState(intent.dropoff || '')
-  const [pickupCoords, setPickupCoords] = useState(intent.pickupCoords || null)
-  const [dropoffCoords, setDropoffCoords] = useState(intent.dropoffCoords || null)
+  const [pickup, setPickup] = useState(initialPickupText)
+  const [dropoff, setDropoff] = useState(initialDropoffText)
+  const [pickupCoords, setPickupCoords] = useState(initialPickupCoords)
+  const [dropoffCoords, setDropoffCoords] = useState(initialDropoffCoords)
   const [userLocation, setUserLocation] = useState(null)
   const [ridePick, setRidePick] = useState(false)
   const [paymentStep, setPaymentStep] = useState(false)
@@ -69,16 +110,66 @@ const [bidOpen, setBidOpen] = useState({})
   const [guestPhone, setGuestPhone] = useState('')
   const [guestModalError, setGuestModalError] = useState('')
 
+  // On mount: consume pending addresses from store / sessionStorage and clear them
+  useEffect(() => {
+    const storeState = getStore()
+    const pending = getPendingAddresses()
+    const pendingP = storeState.pendingPickup || pending.pickup
+    const pendingD = storeState.pendingDropoff || pending.dropoff
+    let consumed = false
+
+    if (pendingP?.text || pendingP?.coords) {
+      if (pendingP.text) setPickup(pendingP.text)
+      if (pendingP.coords) setPickupCoords(pendingP.coords)
+      consumed = true
+    } else if (intent.pickup || intent.pickupCoords) {
+      const text = extractText(intent.pickup)
+      const coords = extractCoords(intent.pickup) || intent.pickupCoords
+      if (text) setPickup(text)
+      if (coords) setPickupCoords(coords)
+    }
+
+    if (pendingD?.text || pendingD?.coords) {
+      if (pendingD.text) setDropoff(pendingD.text)
+      if (pendingD.coords) setDropoffCoords(pendingD.coords)
+      consumed = true
+    } else if (intent.dropoff || intent.dropoffCoords) {
+      const text = extractText(intent.dropoff)
+      const coords = extractCoords(intent.dropoff) || intent.dropoffCoords
+      if (text) setDropoff(text)
+      if (coords) setDropoffCoords(coords)
+    }
+
+    if (consumed) {
+      clearPendingAddresses()
+    }
+  }, [])
+
+  // Keep route draft updated in sessionStorage so refreshing the page preserves the fields
+  useEffect(() => {
+    if (pickup || dropoff) {
+      saveRouteDraft({
+        pickup: { address: pickup, ...(pickupCoords || {}) },
+        dropoff: { address: dropoff, ...(dropoffCoords || {}) },
+        serviceType: 'ride',
+      })
+    }
+  }, [pickup, dropoff, pickupCoords, dropoffCoords])
+
   // Addresses picked on the landing page travel in route state. The useState
   // initializers above only run when this component mounts, so a navigation
   // into an already-mounted Ride page (back/forward, or a second pick) would
   // otherwise leave the inputs stale. Mirror the incoming state on every
   // navigation so the fields show what was just submitted.
   useEffect(() => {
-    if (intent.pickup) setPickup(intent.pickup)
-    if (intent.dropoff) setDropoff(intent.dropoff)
-    if (intent.pickupCoords) setPickupCoords(intent.pickupCoords)
-    if (intent.dropoffCoords) setDropoffCoords(intent.dropoffCoords)
+    if (intent.pickup) setPickup(extractText(intent.pickup))
+    if (intent.dropoff) setDropoff(extractText(intent.dropoff))
+    if (intent.pickupCoords || extractCoords(intent.pickup)) {
+      setPickupCoords(intent.pickupCoords || extractCoords(intent.pickup))
+    }
+    if (intent.dropoffCoords || extractCoords(intent.dropoff)) {
+      setDropoffCoords(intent.dropoffCoords || extractCoords(intent.dropoff))
+    }
   }, [intent.pickup, intent.dropoff, intent.pickupCoords, intent.dropoffCoords])
   // The ride we are hunting a rider for. Kept in a ref so "Try again" can
   // restart the search even when no rider ever matched (matchedRider is null
@@ -597,7 +688,7 @@ function confirmMatchedRide() {
         <section className="overflow-visible rounded-3xl  sm:p-8">
            <div className="max-w-lg gap-3  flex items-center">
             {/* <p className="text-sm font-bold uppercase tracking-wider text-emerald-700">Ride with Swifty</p> */}
-            <Link to="/customer" className='lg:hidden mt-2' ><ChevronLeftIcon className='w-6 h-6'/></Link>
+            <Link to="/customer" className='lg:hidden mt-2' ><ArrowLeft className='w-6 h-6'/></Link>
             <h1 className="mt-2 font-display text-2xl font-black tracking-tight text-slate-950 sm:text-5xl">Where to?</h1>
            
           </div>

@@ -134,11 +134,11 @@ function StatsCard({ activeJobs, rating, trips }) {
 
 function SectionCard({ title, subtitle, right, children }) {
   return (
-    <div className="rounded-2xl border border-surface-200 bg-white p-6 shadow-sm">
+    <div className="rounded-2xl border border-surface-200 bg-slate-50 py-6 px-2 s">
       <div className="mb-5 flex items-center justify-between gap-3">
         <div>
-          <h2 className="font-display text-base font-bold text-slate-900">{title}</h2>
-          {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
+          <h2 className="font-display text-base font-bold px-4 text-slate-900">{title}</h2>
+          {subtitle && <p className="text-xs px-4 text-slate-500">{subtitle}</p>}
         </div>
         {right}
       </div>
@@ -372,9 +372,9 @@ export default function RiderDashboard() {
       {/* Incomplete payment details modal — surfaces on first dashboard visit
           after sign-up/login when the rider hasn't filled in vehicle/verification. */}
       {paymentIncomplete && !paymentDismissed && (
-        <div  onClick={() => setPaymentDismissed(true)} className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-4 sm:items-center">
+        <div  onClick={() => setPaymentDismissed(true)} className="fixed inset-0 z-999 flex h-screen items-center justify-center bg-slate-900/50 p-4 sm:items-center">
           <div className="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl">
-            <div className="relative h-25 w-full">
+            <div className="relative py-10 w-full">
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl ">
                   <AlertCircle className="h-8 w-8 text-amber-500" />

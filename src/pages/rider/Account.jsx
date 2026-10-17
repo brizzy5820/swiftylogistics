@@ -1,3 +1,4 @@
+import { RoleModeSwitchCard } from '@/components/shared/RoleAndOnboardingModal';
 import { useRef, useState } from 'react'
 import { BrandLoader } from '@/components/brand-loader'
 import { useNavigate } from 'react-router-dom'
@@ -118,6 +119,7 @@ export default function RiderAccount() {
           <div className="mb-6">
             <h1 className="font-display text-3xl font-bold tracking-tight text-slate-900">Account</h1>
             <p className="mt-2 text-sm text-slate-500">Profile and payment & verification details.</p>
+            <RoleModeSwitchCard currentMode="rider" />
           </div>
         )}
 
@@ -301,6 +303,7 @@ function ProfilePanel({ user, onAvatarChange, onAvatarRemove, avatarError }) {
 
   return (
     <div className="space-y-6">
+      <RoleModeSwitchCard currentMode="rider" />
       <div className="flex items-center gap-4 rounded-2xl border border-slate-200 p-5">
         <div className="relative shrink-0">
           <div className="flex h-28 w-24 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-100">

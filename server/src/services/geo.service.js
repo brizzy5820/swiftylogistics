@@ -108,7 +108,13 @@ export async function reverseGeocode(lat, lng) {
     lat
   )}&lon=${encodeURIComponent(lng)}`;
 
-  const data = await fetchUpstream(url, undefined, NOMINATIM_TIMEOUT_MS);
+  let data;
+  try {
+    data = await fetchUpstream(url, undefined, NOMINATIM_TIMEOUT_MS);
+  } catch (err) {
+    console.warn(`[geo] Nominatim unavailable, returning null for reverse geocode: ${err.message}`);
+    return null;
+  }
   const addr = data.address || {};
 
   const result = {
@@ -169,8 +175,16 @@ export async function nearbyPlaces({ lat, lng, radiusMeters = 700, query = "" })
   const key = `ovp:${queryText}`;
   let data = readCache(key);
   if (data === undefined) {
-    data = await fetchOverpass(queryText);
-    writeCache(key, data, OVERPASS_CACHE_TTL_MS);
+    try {
+      data = await fetchOverpass(queryText);
+      writeCache(key, data, OVERPASS_CACHE_TTL_MS);
+    } catch (err) {
+      // Upstream Overpass API is down or rate-limited — return empty results
+      // instead of crashing the request. The client can fall back to its own
+      // geocoding providers (Google Maps, etc.).
+      console.warn(`[geo] Overpass unavailable, returning empty nearby results: ${err.message}`);
+      return [];
+    }
   }
 
   const elements = Array.isArray(data?.elements) ? data.elements : [];

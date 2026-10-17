@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { BrandLoader } from '@/components/brand-loader'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import {
   MapPin, ArrowLeft, ArrowRight,
   CheckCircle2, ArrowLeftRight, Navigation, AlertTriangle, Radio, ChevronLeftIcon,
@@ -21,7 +21,7 @@ import { MobileRouteMap, RouteMapPanel } from '@/components/mobile-route-map'
 import { MobileDrawer } from '@/components/mobile-drawer'
 import { RiderSearchDrawer, SEARCH_COUNTDOWN_MS } from '@/components/rider-search-drawer'
 import { useRequireAuth } from '@/lib/use-require-auth'
-import { createDelivery, updateDeliveryStatus, useStore } from '@/lib/api-store'
+import { createDelivery, updateDeliveryStatus, useStore, getStore, getPendingAddresses, clearPendingAddresses, saveRouteDraft, getRouteDraft } from '@/lib/api-store'
 import { getErrorMessage } from '@/services/api'
 import { useSimulatedCourierPosition } from '@/lib/use-simulated-courier'
 
@@ -370,28 +370,129 @@ function weightMeta(w) {
       </div>
     )
   }
+function extractText(val) {
+  if (!val) return ''
+  if (typeof val === 'string') return val
+  return val.text || val.address || val.label || ''
+}
+
+function extractCoords(val, fallback = null) {
+  if (!val) return fallback
+  if (val.coords && typeof val.coords.lat === 'number' && typeof val.coords.lng === 'number') return val.coords
+  if (typeof val.lat === 'number' && typeof val.lng === 'number') return { lat: val.lat, lng: val.lng }
+  return fallback
+}
+
 /* ─── Main page ──────────────────────────────────────────────────────── */
 export default function Book() {
   const user = useRequireAuth('customer')
   const navigate = useNavigate()
-  const intent = location.state || {}
+  const location = useLocation()
+  const navState = location.state || {}
+  const intent = (navState.intent && typeof navState.intent === 'object') ? navState.intent : navState
+
+  const pendingInitial = useMemo(() => getPendingAddresses(), [])
+  const initialDraft = useMemo(() => getRouteDraft(), [])
+
+  const initialPickupText =
+    extractText(intent.pickup) ||
+    pendingInitial.pickup?.text ||
+    extractText(initialDraft.pickup) ||
+    ''
+  const initialPickupCoords =
+    intent.pickupCoords ||
+    extractCoords(intent.pickup) ||
+    pendingInitial.pickup?.coords ||
+    extractCoords(initialDraft.pickup) ||
+    null
+
+  const initialDropoffText =
+    extractText(intent.dropoff) ||
+    pendingInitial.dropoff?.text ||
+    extractText(initialDraft.dropoff) ||
+    ''
+  const initialDropoffCoords =
+    intent.dropoffCoords ||
+    extractCoords(intent.dropoff) ||
+    pendingInitial.dropoff?.coords ||
+    extractCoords(initialDraft.dropoff) ||
+    null
+
   /* form state */
-  const [step, setStep]               = useState(0)
-  const [pickupQuery, setPickupQuery] = useState(intent.pickup || '')
-  const [dropoffQuery, setDropoffQuery] = useState(intent.dropoff || '')
-  const [pickupCoords, setPickupCoords] = useState(intent.pickupCoords || null)
-  const [dropoffCoords, setDropoffCoords] = useState(intent.dropoffCoords || null)
-  const [confirmedPickup, setConfirmedPickup]   = useState('')
-  const [confirmedDropoff, setConfirmedDropoff] = useState('')
-  const [showPickupDrop, setShowPickupDrop]   = useState(intent.pickupCoords || null)
-  const [showDropoffDrop, setShowDropoffDrop] = useState(intent.dropoffCoords || null)
+  const [step, setStep] = useState(0)
+  const [pickupQuery, setPickupQuery] = useState(initialPickupText)
+  const [dropoffQuery, setDropoffQuery] = useState(initialDropoffText)
+  const [pickupCoords, setPickupCoords] = useState(initialPickupCoords)
+  const [dropoffCoords, setDropoffCoords] = useState(initialDropoffCoords)
+  const [confirmedPickup, setConfirmedPickup] = useState(initialPickupText)
+  const [confirmedDropoff, setConfirmedDropoff] = useState(initialDropoffText)
+  const [showPickupDrop, setShowPickupDrop] = useState(false)
+  const [showDropoffDrop, setShowDropoffDrop] = useState(false)
   const [pickupSuggestions, setPickupSuggestions] = useState(ADDRESS_SUGGESTIONS)
   const [dropoffSuggestions, setDropoffSuggestions] = useState(ADDRESS_SUGGESTIONS)
-  const [pkg, setPkg]     = useState('Express')
+  const [pkg, setPkg] = useState('Express')
   const [weight, setWeight] = useState(5)
-  const [note, setNote]   = useState('')
+  const [note, setNote] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  // On mount: consume pending addresses from store / sessionStorage and clear them
+  useEffect(() => {
+    const storeState = getStore()
+    const pending = getPendingAddresses()
+    const pendingP = storeState.pendingPickup || pending.pickup
+    const pendingD = storeState.pendingDropoff || pending.dropoff
+    let consumed = false
+
+    if (pendingP?.text || pendingP?.coords) {
+      if (pendingP.text) {
+        setPickupQuery(pendingP.text)
+        setConfirmedPickup(pendingP.text)
+      }
+      if (pendingP.coords) setPickupCoords(pendingP.coords)
+      consumed = true
+    } else if (intent.pickup || intent.pickupCoords) {
+      const text = extractText(intent.pickup)
+      const coords = extractCoords(intent.pickup) || intent.pickupCoords
+      if (text) {
+        setPickupQuery(text)
+        setConfirmedPickup(text)
+      }
+      if (coords) setPickupCoords(coords)
+    }
+
+    if (pendingD?.text || pendingD?.coords) {
+      if (pendingD.text) {
+        setDropoffQuery(pendingD.text)
+        setConfirmedDropoff(pendingD.text)
+      }
+      if (pendingD.coords) setDropoffCoords(pendingD.coords)
+      consumed = true
+    } else if (intent.dropoff || intent.dropoffCoords) {
+      const text = extractText(intent.dropoff)
+      const coords = extractCoords(intent.dropoff) || intent.dropoffCoords
+      if (text) {
+        setDropoffQuery(text)
+        setConfirmedDropoff(text)
+      }
+      if (coords) setDropoffCoords(coords)
+    }
+
+    if (consumed) {
+      clearPendingAddresses()
+    }
+  }, [])
+
+  // Keep route draft updated in sessionStorage so refreshing the page preserves the fields
+  useEffect(() => {
+    if (pickupQuery || dropoffQuery) {
+      saveRouteDraft({
+        pickup: { address: pickupQuery, ...(pickupCoords || {}) },
+        dropoff: { address: dropoffQuery, ...(dropoffCoords || {}) },
+        serviceType: 'delivery',
+      })
+    }
+  }, [pickupQuery, dropoffQuery, pickupCoords, dropoffCoords])
 
   /* ── Guest contact ──
      A guest has no contact on file. It is collected here, at the last moment:
@@ -806,7 +907,7 @@ export default function Book() {
                  {/* Back button */}
            <div className="max-w-lg gap-3  mt-5 flex items-center">
             {/* <p className="text-sm font-bold uppercase tracking-wider text-emerald-700">Ride with Swifty</p> */}
-            <Link to="/customer" className='lg:hidden ' ><ChevronLeftIcon className='w-6 h-6'/></Link>
+            <Link to="/customer" className='lg:hidden ' ><ArrowLeft className='w-6 h-6'/></Link>
             <h1 className=" font-display text-2xl font-black tracking-tight text-slate-950 sm:text-5xl">Place Delivery</h1>
            
           </div>
